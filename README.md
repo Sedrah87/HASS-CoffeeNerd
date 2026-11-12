@@ -4,7 +4,7 @@ Eigene Home-Assistant-Integration für Espresso- und Filter-Shots aus der Coffee
 Die App lädt Brews in die eigene HASS-Instanz hoch, statt sie zu visualizer.coffee zu schicken.
 Dort stehen sie als Liste mit Filtern und mit Kurven für Gewicht, Fluss, Druck und Temperatur.
 
-> **Stand:** Grundgerüst. Upload, Speicherung und Panel folgen, siehe [docs/plan-backend.md](docs/plan-backend.md).
+> **Stand:** Upload und Speicherung. Sensor, Event und Panel folgen, siehe [docs/plan-backend.md](docs/plan-backend.md).
 
 ## Installation (HACS)
 
