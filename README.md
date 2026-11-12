@@ -8,7 +8,11 @@ Dort stehen sie als Liste mit Filtern und mit Kurven für Gewicht, Fluss, Druck 
 
 ## Installation (HACS)
 
-1. HACS → ⋮ → *Benutzerdefinierte Repositories* → die URL dieses Repos mit Typ *Integration* hinzufügen.
+CoffeeNørd steht nicht in der HACS-Standardliste, weil die Lizenz nichtkommerziell ist.
+Die Integration wird darum als benutzerdefiniertes Repository eingebunden:
+
+1. HACS → ⋮ → *Benutzerdefinierte Repositories* → `https://github.com/Sedrah87/HASS-CoffeeNerd`
+   mit Typ *Integration* hinzufügen.
 2. *CoffeeNørd* installieren und Home Assistant neu starten.
 3. *Einstellungen → Geräte & Dienste → Integration hinzufügen → CoffeeNørd*.
 
@@ -39,6 +43,11 @@ uv pip install --python .venv/bin/python -r requirements_test.txt
 .venv/bin/ruff check . && .venv/bin/pytest
 git config core.hooksPath .githooks   # Privatsphäre-Prüfung vor Commit und Push
 ```
+
+## Mitmachen
+
+Fehler und Wünsche bitte als Issue auf GitHub melden. Das GitHub-Repo ist ein Spiegel,
+Pull Requests lassen sich dort nicht direkt übernehmen.
 
 ## Lizenz
 
