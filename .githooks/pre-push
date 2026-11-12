@@ -1,0 +1,8 @@
+#!/bin/sh
+# Prüft nur Commits, die noch auf keinem Remote liegen (schnell, auch bei großer Historie).
+# Die vollständige Historie prüft die GitLab-CI.
+pruefer="$(git rev-parse --show-toplevel)/scripts/privatsphaere_pruefen.sh"
+while read -r lokal_ref lokal_sha remote_ref remote_sha; do
+    case "$lokal_sha" in *[!0]*) ;; *) continue ;; esac   # nur Nullen = Löschen, nichts zu prüfen
+    "$pruefer" historie "$lokal_sha" --not --remotes || exit 1
+done
