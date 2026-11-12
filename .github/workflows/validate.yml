@@ -1,0 +1,24 @@
+# Läuft auf dem GitHub-Spiegel (nur main und Tags, siehe .gitlab-ci.yml).
+# hassfest und die HACS-Prüfung gibt es nur als GitHub Action.
+name: Validate
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  hassfest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: home-assistant/actions/hassfest@master
+
+  hacs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: hacs/action@main
+        with:
+          category: integration
+          # Ein Eintrag im home-assistant/brands-Repo fehlt noch.
+          ignore: brands

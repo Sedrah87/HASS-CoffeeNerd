@@ -1,0 +1,3 @@
+# Bringt die passende Home-Assistant-Version mit (0.13.375 → homeassistant 2026.10.4).
+pytest-homeassistant-custom-component==0.13.375
+ruff

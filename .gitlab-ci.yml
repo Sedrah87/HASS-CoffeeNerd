@@ -9,6 +9,7 @@
 
 stages:
   - pruefen
+  - testen
   - spiegeln
 
 variables:
@@ -22,6 +23,20 @@ privatsphaere:
     entrypoint: [""]   # Image startet sonst jeden Befehl als „git …“
   script:
     - sh scripts/privatsphaere_pruefen.sh historie
+
+python:
+  stage: testen
+  image: python:3.14
+  variables:
+    PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
+  cache:
+    key: pip-$CI_JOB_NAME
+    paths: [.cache/pip]
+  script:
+    - pip install -q -r requirements_test.txt
+    - ruff check .
+    - ruff format --check .
+    - pytest -q
 
 github:
   stage: spiegeln
