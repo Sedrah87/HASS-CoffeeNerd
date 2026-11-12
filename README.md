@@ -14,6 +14,23 @@ Dort stehen sie als Liste mit Filtern und mit Kurven für Gewicht, Fluss, Druck 
 
 Voraussetzung: Home Assistant 2026.10 oder neuer.
 
+## Upload testen
+
+Ein Long-Lived Access Token wird unter *Profil → Sicherheit* erstellt.
+
+```sh
+curl -X POST "http://homeassistant.local:8123/api/coffeenord/shots" \
+  -H "Authorization: Bearer $HASS_TOKEN" -H "Content-Type: application/json" \
+  -d '{"schema_version": 1, "shot_id": "test-1", "brewed_at": 1762941151,
+       "visualizer": {"bean": {"name": "Testbohne"}, "brew": {"grind_weight": 18,
+       "brew_beverage_quantity": 36, "brew_time": 28}}}'
+# → {"shot_id": "test-1", "status": "created"}
+```
+
+Ein zweiter, identischer Aufruf liefert `unchanged`. Mehrere Shots lassen sich mit
+`POST /api/coffeenord/shots/batch` und `{"shots": [...]}` hochladen, höchstens 20 pro Aufruf.
+Die Datenbank liegt unter `<config>/coffeenord/shots.db`.
+
 ## Entwicklung
 
 ```sh
