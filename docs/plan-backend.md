@@ -147,11 +147,8 @@ die Sprache richtet sich nach HASS.
    Danach lassen sich Shots schon per `curl` hochladen.
 3. **Sensor, Event und WebSocket-Commands** mit Tests.
 4. **Panel:** Liste, Filter, Detailansicht mit ECharts.
-5. **App-Seite** (in Beanconqueror, eigener Branch `feature/hass-visualizer`): HASS als Upload-Ziel
-   mit URL und Token aus der Mühlen-Steckdose. Der Upload wird in `customInformation.hass_shot_uploaded_at`
-   gemerkt, unabhängig von `visualizer_id`. Dazu kommt „Alle Brews nach Home Assistant hochladen (N)“
-   per Batch mit Fortschritt und Zusammenfassung. Brews ohne Kurven werden auch hochgeladen.
-   HASS ist wie Sync und Webhook vom Kill-Switch ausgenommen.
+5. **App-Seite:** gehört nicht in dieses Repo. Die App nutzt die oben beschriebene Upload-Schnittstelle,
+   die Umsetzung wird im App-Repo geplant und dokumentiert.
 
 Getestet wird jeder Schritt an der eigenen HASS-Instanz. Dafür wird `custom_components/coffeenord`
 dorthin kopiert und HASS neu gestartet.
