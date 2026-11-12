@@ -32,11 +32,11 @@ custom_components/coffeenord/
   http.py            HomeAssistantView für den Upload
   websocket.py       WebSocket-Commands für das Panel
   sensor.py          sensor.coffeenord_letzter_shot
-  frontend/          gebautes Panel-Bundle (aus frontend/ erzeugt, wird mit eingecheckt)
+  frontend/          gebautes Panel-Bundle und THIRD_PARTY_NOTICES.md (eingecheckt)
   translations/      de.json, en.json
 frontend/            Quellcode des Panels (TypeScript, Lit, ECharts, Vite)
 tests/               pytest mit pytest-homeassistant-custom-component
-hacs.json, README.md, THIRD_PARTY_NOTICES.md
+hacs.json, README.md
 ```
 
 ## Schnittstelle App → HASS
@@ -123,22 +123,34 @@ und `flow2`. `ratio` wird nur berechnet, wenn Dosis und Ausbeute größer als 0 
 
 Das Panel ist über `panel_custom` in der Seitenleiste registriert und nur für Admins sichtbar.
 Es wird mit Lit und ECharts gebaut, Vite erzeugt daraus ein einzelnes Bundle. Die Liste hat Filter
-oben und lädt beim Scrollen nach. Die Detailansicht zeigt die Kennzahlen und darunter ein Diagramm:
-Gewicht und Fluss auf der linken Achse, Druck und Temperatur auf der rechten, mit Zoom und Tooltip.
-Shots ohne Kurven zeigen nur die Kennzahlen. Die Oberfläche ist auf Deutsch und Englisch verfügbar,
-die Sprache richtet sich nach HASS.
+oben und lädt über „Weitere laden“ jeweils 50 Shots nach. Die Detailansicht zeigt die Kennzahlen und
+darunter die Kurven. Shots ohne Kurven zeigen nur die Kennzahlen. Die Oberfläche ist auf Deutsch und
+Englisch verfügbar, die Sprache richtet sich nach HASS.
+
+Abweichungen von der ersten Skizze (umgesetzt in Schritt 4):
+- **Keine zweite y-Achse.** Gewicht, Fluss, Druck und Temperatur stehen in eigenen, übereinanderliegenden
+  Diagrammen mit eigener Einheit. Zeitachse, Fadenkreuz und Zoom sind gekoppelt. Zwei Achsen in
+  einem Diagramm verleiten zu falschen Vergleichen zwischen Werten mit unterschiedlicher Skala.
+- **Farben:** Waage 1 blau, Waage 2 orange. Beide sind für Farbsehschwächen und gegen den hellen und
+  dunklen HASS-Hintergrund geprüft. Eine Legende gibt es nur, wenn eine zweite Waage Daten hat.
+- **Tabellenansicht** der Messwerte (ein Wert pro Sekunde) als aufklappbarer Bereich, damit die Werte
+  auch ohne Diagramm lesbar sind.
+- **„Weitere laden“ als Button** statt Nachladen beim Scrollen. Das ist einfacher und funktioniert
+  auch per Tastatur verlässlich.
 
 ## Qualität und CI
 
 - Python: `ruff` und `pytest` mit `pytest-homeassistant-custom-component`. Getestet werden die
   Payload-Prüfung, die Kurvenaufbereitung, Upsert und `unchanged`, Batch mit fehlerhaften Einträgen,
   die Grenzen, die 1-Stunden-Regel fürs Event und die WebSocket-Filter.
-- Frontend: `tsc`, `eslint`, Build.
-- Lizenzprüfung der Abhängigkeiten mit `pip-licenses` und `license-checker`. Erlaubt sind nur
-  MIT, BSD, Apache-2.0 und ISC, alles andere lässt den Build scheitern.
+- Frontend: `tsc`, `eslint`, Build. Die CI prüft außerdem, dass das eingecheckte Bundle zum Quellcode passt.
+- Lizenzprüfung: `frontend/scripts/licenses.mjs` prüft genau die Pakete, die im Bundle landen. Erlaubt
+  sind MIT, ISC, 0BSD, BSD-2/3-Clause und Apache-2.0, alles andere lässt den Build scheitern. Die Integration
+  selbst hat keine Python-Abhängigkeiten, darum ist dort keine Prüfung nötig.
 - Die GitLab-CI bekommt eine Stage `testen` zwischen `pruefen` und `spiegeln`. `hassfest` und die
   HACS-Validierung laufen als GitHub Action auf dem Spiegel.
-- `THIRD_PARTY_NOTICES.md` mit den Lizenzhinweisen von ECharts, Lit und den übrigen Abhängigkeiten.
+- `custom_components/coffeenord/frontend/THIRD_PARTY_NOTICES.md` mit den Lizenz- und NOTICE-Texten aller
+  gebündelten Pakete. Sie wird vom Lizenzskript erzeugt und bei der Installation mitgeliefert.
 
 ## Reihenfolge
 
