@@ -42,6 +42,30 @@ SHOT_COLUMNS = (
     "payload",
 )
 
+# Spalten der Zusammenfassung (Liste, Sensor, Event), ohne Kurven und Rohdaten.
+SUMMARY_COLUMNS = (
+    "id",
+    "brewed_at",
+    "updated_at",
+    "bean_name",
+    "bean_roaster",
+    "bean2_name",
+    "mill_name",
+    "preparation_name",
+    "preparation_style",
+    "grind_size",
+    "dose_g",
+    "yield_g",
+    "brew_time_s",
+    "ratio",
+    "tds",
+    "ey",
+    "rating",
+    "peak_pressure",
+    "has_curves",
+)
+_SUMMARY_SELECT = f"SELECT {', '.join(SUMMARY_COLUMNS)} FROM shots"
+
 CREATE_STATEMENTS = (
     "CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)",
     """
@@ -164,9 +188,95 @@ class ShotStore:
         shot["curves"] = json.loads(shot["curves"])
         return shot
 
+    def list(
+        self,
+        *,
+        bean: str | None = None,
+        mill: str | None = None,
+        preparation: str | None = None,
+        brewed_from: int | None = None,
+        brewed_to: int | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> tuple[list[dict[str, Any]], int]:
+        """Zusammenfassungen, neueste zuerst, und die Gesamtzahl der Treffer.
+
+        Der Bohnen-Filter trifft auch die zweite Bohne eines Blend-Shots.
+        """
+        conditions: list[str] = []
+        params: list[Any] = []
+        if bean is not None:
+            conditions.append("(bean_name = ? OR bean2_name = ?)")
+            params += [bean, bean]
+        if mill is not None:
+            conditions.append("mill_name = ?")
+            params.append(mill)
+        if preparation is not None:
+            conditions.append("preparation_name = ?")
+            params.append(preparation)
+        if brewed_from is not None:
+            conditions.append("brewed_at >= ?")
+            params.append(brewed_from)
+        if brewed_to is not None:
+            conditions.append("brewed_at <= ?")
+            params.append(brewed_to)
+        where = f" WHERE {' AND '.join(conditions)}" if conditions else ""
+
+        with self._lock:
+            total = self._db.execute(
+                f"SELECT COUNT(*) FROM shots{where}", params
+            ).fetchone()[0]
+            rows = self._db.execute(
+                f"{_SUMMARY_SELECT}{where} "
+                "ORDER BY brewed_at DESC, id LIMIT ? OFFSET ?",
+                [*params, limit, offset],
+            ).fetchall()
+        return [_summary(row) for row in rows], total
+
+    def latest(self) -> dict[str, Any] | None:
+        """Zusammenfassung des zuletzt gebrühten Shots."""
+        with self._lock:
+            row = self._db.execute(
+                f"{_SUMMARY_SELECT} ORDER BY brewed_at DESC, id LIMIT 1"
+            ).fetchone()
+        return _summary(row) if row is not None else None
+
+    def filter_values(self) -> dict[str, list[str]]:
+        """Vorhandene Bohnen, Mühlen und Zubereitungen für die Auswahllisten."""
+        with self._lock:
+            beans = self._db.execute(
+                "SELECT bean_name FROM shots WHERE bean_name IS NOT NULL "
+                "UNION SELECT bean2_name FROM shots WHERE bean2_name IS NOT NULL "
+                "ORDER BY 1"
+            ).fetchall()
+            mills = self._db.execute(
+                "SELECT DISTINCT mill_name FROM shots WHERE mill_name IS NOT NULL "
+                "ORDER BY 1"
+            ).fetchall()
+            preparations = self._db.execute(
+                "SELECT DISTINCT preparation_name FROM shots "
+                "WHERE preparation_name IS NOT NULL ORDER BY 1"
+            ).fetchall()
+        return {
+            "beans": [row[0] for row in beans],
+            "mills": [row[0] for row in mills],
+            "preparations": [row[0] for row in preparations],
+        }
+
+    def delete(self, shot_id: str) -> bool:
+        """Shot löschen. Liefert False, wenn es ihn nicht gab."""
+        with self._lock, self._db as db:
+            return db.execute("DELETE FROM shots WHERE id = ?", (shot_id,)).rowcount > 0
+
     def count(self) -> int:
         with self._lock:
             return self._db.execute("SELECT COUNT(*) FROM shots").fetchone()[0]
+
+
+def _summary(row: sqlite3.Row) -> dict[str, Any]:
+    summary = dict(row)
+    summary["has_curves"] = bool(summary["has_curves"])
+    return summary
 
 
 def _shot_values(shot: Shot) -> tuple[Any, ...]:

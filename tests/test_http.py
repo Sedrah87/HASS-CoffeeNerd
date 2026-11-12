@@ -3,27 +3,14 @@
 from http import HTTPStatus
 from pathlib import Path
 
-import pytest
 from homeassistant.core import HomeAssistant
-from pytest_homeassistant_custom_component.common import MockConfigEntry
 
-from custom_components.coffeenord.const import DOMAIN, MAX_BATCH_SHOTS, MAX_SHOT_BYTES
+from custom_components.coffeenord.const import MAX_BATCH_SHOTS, MAX_SHOT_BYTES
 
 from .payloads import make_shot
 
 SHOTS_URL = "/api/coffeenord/shots"
 BATCH_URL = "/api/coffeenord/shots/batch"
-
-
-@pytest.fixture
-async def setup_integration(hass: HomeAssistant, tmp_path: Path) -> MockConfigEntry:
-    # Datenbank im temporären Verzeichnis statt im Test-Konfigurationsordner
-    hass.config.config_dir = str(tmp_path)
-    entry = MockConfigEntry(domain=DOMAIN)
-    entry.add_to_hass(hass)
-    assert await hass.config_entries.async_setup(entry.entry_id)
-    await hass.async_block_till_done()
-    return entry
 
 
 async def test_upload_requires_auth(hass_client_no_auth, setup_integration) -> None:

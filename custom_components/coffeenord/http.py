@@ -18,6 +18,7 @@ from homeassistant.core import HomeAssistant
 
 from .const import DOMAIN, MAX_BATCH_SHOTS, MAX_SHOT_BYTES, STATUS_ERROR
 from .models import parse_shot
+from .shots import async_save_shot
 from .store import ShotStore
 
 _LOGGER = logging.getLogger(__name__)
@@ -88,7 +89,7 @@ class ShotUploadView(HomeAssistantView):
         except vol.Invalid as err:
             return _error(f"Ungültiger Shot: {err}", HTTPStatus.BAD_REQUEST)
 
-        status = await hass.async_add_executor_job(store.upsert, shot)
+        status = await async_save_shot(hass, store, shot)
         return self.json({"shot_id": shot.id, "status": status})
 
 
@@ -141,7 +142,7 @@ class ShotBatchUploadView(HomeAssistantView):
                     {"shot_id": shot_id, "status": STATUS_ERROR, "error": str(err)}
                 )
                 continue
-            status = await hass.async_add_executor_job(store.upsert, shot)
+            status = await async_save_shot(hass, store, shot)
             results.append({"shot_id": shot.id, "status": status})
 
         return self.json({"results": results})
