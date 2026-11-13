@@ -6,6 +6,10 @@
 </p>
 
 <p align="center">
+  <a href="https://my.home-assistant.io/redirect/hacs_repository/?owner=Sedrah87&repository=HASS-CoffeeNerd&category=integration"><img alt="In HACS öffnen" src="https://my.home-assistant.io/badges/hacs_repository.svg"></a>
+</p>
+
+<p align="center">
   <a href="https://hacs.xyz/docs/faq/custom_repositories/"><img alt="HACS: benutzerdefiniertes Repository" src="https://img.shields.io/badge/HACS-benutzerdefiniert-41BDF5?logo=homeassistantcommunitystore&logoColor=white"></a>
   <img alt="Home Assistant 2026.10+" src="https://img.shields.io/badge/Home%20Assistant-2026.10%2B-18BCF2?logo=homeassistant&logoColor=white">
   <a href="https://github.com/Sedrah87/HASS-CoffeeNerd/actions/workflows/validate.yml"><img alt="Validate" src="https://github.com/Sedrah87/HASS-CoffeeNerd/actions/workflows/validate.yml/badge.svg"></a>
@@ -48,8 +52,14 @@ curves for weight, flow, pressure and temperature. UI in German and English.*
 
 ### Über HACS (empfohlen)
 
-CoffeeNørd steht nicht in der HACS-Standardliste, weil die Lizenz nichtkommerziell ist. Du bindest es
-als benutzerdefiniertes Repository ein:
+[![In HACS öffnen](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=Sedrah87&repository=HASS-CoffeeNerd&category=integration)
+
+Der Button öffnet CoffeeNørd in deinem HACS. Kennt HACS das Repository noch nicht, fragt es, ob es als
+benutzerdefiniertes Repository hinzugefügt werden soll. Danach *Herunterladen* wählen und Home Assistant
+neu starten.
+
+CoffeeNørd steht nicht in der HACS-Standardliste, weil die Lizenz nichtkommerziell ist. Ohne den Button
+geht es so:
 
 1. HACS öffnen → ⋮ oben rechts → **Benutzerdefinierte Repositories**.
 2. `https://github.com/Sedrah87/HASS-CoffeeNerd` eintragen, Typ **Integration**, hinzufügen.
@@ -64,8 +74,12 @@ kopieren und Home Assistant neu starten.
 
 1. **Integration hinzufügen:** *Einstellungen → Geräte & Dienste → Integration hinzufügen → CoffeeNørd*.
    Es gibt nichts einzugeben. Danach erscheint „Shots“ in der Seitenleiste (nur für Admins).
+
+   [![Integration einrichten](https://my.home-assistant.io/badges/config_flow_start.svg)](https://my.home-assistant.io/redirect/config_flow_start/?domain=coffeenord)
 2. **Token erstellen:** In Home Assistant unten links auf dein Profil → *Sicherheit* →
    *Langlebige Zugangs-Token* → *Token erstellen*. Den Token kopieren, er wird nur einmal angezeigt.
+
+   [![Profil öffnen](https://my.home-assistant.io/badges/profile.svg)](https://my.home-assistant.io/redirect/profile_security/)
 3. **App verbinden:** In der CoffeeNørd-App unter *Einstellungen → Home Assistant* die Adresse deiner
    Instanz (z. B. `http://homeassistant.local:8123`) und den Token eintragen, mit *Verbindung testen*
    prüfen und **Shots nach Home Assistant hochladen** einschalten.
