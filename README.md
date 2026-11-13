@@ -36,7 +36,7 @@ curves for weight, flow, pressure and temperature. UI in German and English.*
   Messwerte als Tabelle.
 - **Auswertung für den Mahlgrad:** Die App schickt ihre Shot-Auswertung mit: Profil (gleichmäßig,
   ansteigend, langsamer Start, Channeling, viel zu schnell), Fluss in der Hauptphase und den Dritteln,
-  erster Tropfen, Pumpenende und den Hinweis zum Mahlgrad. Erster Tropfen und Pumpenende erscheinen
+  erster Tropfen, Pumpenende und den Hinweis fürs nächste Mal (meist der Mahlgradvorschlag). Erster Tropfen und Pumpenende erscheinen
   als Linien in den Kurven, die Liste lässt sich nach Profil filtern.
 - **Alte Brews mitnehmen:** Die App lädt auf Wunsch die ganze Historie hoch, auch Brews ohne Kurven.
   Mehrfaches Hochladen erzeugt keine Duplikate, ein bearbeiteter Brew wird aktualisiert.
@@ -96,7 +96,7 @@ Neue und bearbeitete Brews lädt die App danach beim Speichern automatisch hoch.
 
 Der Sensor **Letzter Shot** (Gerät *CoffeeNørd*) zeigt den Zeitpunkt des zuletzt gebrühten Shots.
 Bohne, Mühle, Zubereitung, Dosis, Ausbeute, Zeit, Verhältnis, Mahlgrad, Spitzendruck, Profil
-(`shape`), Fluss der Hauptphase (`main_flow`) und der Hinweis zum Mahlgrad (`grind_hint`) stehen als
+(`shape`), Fluss der Hauptphase (`main_flow`) und der Hinweis fürs nächste Mal (`grind_hint`) stehen als
 Attribute dabei.
 
 Das Event `coffeenord_shot_received` kommt nur bei **neuen** Shots, die höchstens eine Stunde alt sind.
@@ -119,7 +119,7 @@ automation:
 
 Im Event stehen `shot_id`, `brewed_at`, `bean_name`, `bean2_name`, `mill_name`, `preparation_name`,
 `preparation_style`, `grind_size`, `dose_g`, `yield_g`, `brew_time_s`, `ratio`, `peak_pressure`,
-`shape`, `main_flow` und `grind_hint`. Den Hinweis zum Mahlgrad kannst du dir so z. B. nach jedem Shot
+`shape`, `main_flow` und `grind_hint`. Den Hinweis fürs nächste Mal kannst du dir so z. B. nach jedem Shot
 aufs Handy schicken:
 
 ```yaml
