@@ -16,7 +16,7 @@ from custom_components.coffeenord.const import (
 from custom_components.coffeenord.models import parse_shot
 from custom_components.coffeenord.store import ShotStore
 
-from .payloads import make_shot
+from .payloads import make_shot, make_shot_with_analysis
 
 
 @pytest.fixture
@@ -134,6 +134,7 @@ def test_latest_and_filter_values(store: ShotStore) -> None:
         "beans": ["Brasil", "Kenia"],
         "mills": ["Testmühle"],
         "preparations": ["Siebträger"],
+        "shapes": [],
     }
 
 
@@ -175,3 +176,56 @@ def shot_store_version(path: Path) -> int:
                 0
             ]
         )
+
+
+def test_same_version_with_new_data_updates(store: ShotStore) -> None:
+    """Die App schickt denselben Stand erneut, jetzt mit Auswertung."""
+    assert store.upsert(parse_shot(make_shot())) == STATUS_CREATED
+    assert store.upsert(parse_shot(make_shot())) == STATUS_UNCHANGED
+
+    assert store.upsert(parse_shot(make_shot_with_analysis())) == STATUS_UPDATED
+
+    shot = store.get(make_shot()["shot_id"])
+    assert shot["shape"] == "SLOW_START"
+    assert shot["analysis"]["end_s"] == 34.07
+
+
+def test_older_version_never_overwrites(store: ShotStore) -> None:
+    store.upsert(parse_shot(make_shot_with_analysis()))
+
+    older = make_shot(updated_at=make_shot()["updated_at"] - 60)
+
+    assert store.upsert(parse_shot(older)) == STATUS_UNCHANGED
+    assert store.get(older["shot_id"])["shape"] == "SLOW_START"
+
+
+def test_filter_by_shape(store: ShotStore) -> None:
+    store.upsert(parse_shot(make_shot_with_analysis(shot_id="langsam")))
+    store.upsert(parse_shot(make_shot(shot_id="ohne")))
+
+    assert [s["id"] for s in store.list(shape="SLOW_START")[0]] == ["langsam"]
+    assert store.filter_values()["shapes"] == ["SLOW_START"]
+    assert store.latest()["grind_hint"] in (None, "Zu langsam. Zurück auf 19.")
+
+
+def test_migration_from_version_1_schema(tmp_path: Path) -> None:
+    """Eine Datenbank aus 0.1.x bekommt die neuen Spalten und wird neu berechnet."""
+    path = tmp_path / "coffeenord" / "shots.db"
+    shot_store = ShotStore(path)
+    shot_store.open()
+    shot_store.upsert(parse_shot(make_shot_with_analysis()))
+    shot_store.close()
+    with sqlite3.connect(path) as conn:
+        conn.execute("DROP INDEX idx_shots_shape")
+        for column in ("shape", "main_flow", "grind_hint", "analysis"):
+            conn.execute(f"ALTER TABLE shots DROP COLUMN {column}")
+        conn.execute("UPDATE meta SET value = '1' WHERE key = 'db_version'")
+
+    shot_store = ShotStore(path)
+    shot_store.open()
+    shot = shot_store.get(make_shot()["shot_id"])
+    shot_store.close()
+
+    assert shot_store_version(path) == DB_VERSION
+    assert shot["shape"] == "SLOW_START"
+    assert shot["analysis"]["first_drip_s"] == 5.42

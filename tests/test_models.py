@@ -5,7 +5,7 @@ import voluptuous as vol
 
 from custom_components.coffeenord.models import parse_shot
 
-from .payloads import make_shot
+from .payloads import make_shot, make_shot_with_analysis
 
 
 def test_parse_summary() -> None:
@@ -224,3 +224,42 @@ def test_weight_without_tare_is_kept() -> None:
     shot = parse_shot(payload)
 
     assert shot.curves["weight"] == [[0.0, 2.0], [1.0, 4.0]]
+
+
+def test_analysis_from_app() -> None:
+    shot = parse_shot(make_shot_with_analysis())
+
+    assert shot.shape == "SLOW_START"
+    assert shot.main_flow == 1.11
+    assert shot.grind_hint == "Zu langsam. Zurück auf 19."
+    assert shot.analysis == {
+        "version": 1,
+        "shape": "SLOW_START",
+        "first_drip_s": 5.42,
+        "end_s": 34.07,
+        "main_flow": 1.11,
+        "first_third_flow": 0.31,
+        "last_third_flow": 2.01,
+        "peak_flow": 2.2,
+        "max_rise_2s": 0.45,
+        "grind_hint": "Zu langsam. Zurück auf 19.",
+    }
+
+
+def test_analysis_unknown_shape_and_bad_values() -> None:
+    payload = make_shot(
+        analysis={"shape": "UNKNOWN", "main_flow": "schnell", "first_drip_s": None}
+    )
+
+    shot = parse_shot(payload)
+
+    assert shot.shape is None
+    assert shot.main_flow is None
+    assert shot.analysis == {}
+
+
+def test_shot_without_analysis() -> None:
+    shot = parse_shot(make_shot())
+
+    assert shot.shape is None
+    assert shot.analysis == {}

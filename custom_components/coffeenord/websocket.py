@@ -45,6 +45,7 @@ def _store(
         vol.Optional("bean"): str,
         vol.Optional("mill"): str,
         vol.Optional("preparation"): str,
+        vol.Optional("shape"): str,
         vol.Optional("from"): vol.Coerce(int),
         vol.Optional("to"): vol.Coerce(int),
         vol.Optional("limit", default=50): vol.All(int, vol.Range(min=1, max=200)),
@@ -63,6 +64,7 @@ async def ws_list_shots(
             bean=msg.get("bean"),
             mill=msg.get("mill"),
             preparation=msg.get("preparation"),
+            shape=msg.get("shape"),
             brewed_from=msg.get("from"),
             brewed_to=msg.get("to"),
             limit=msg["limit"],
@@ -96,7 +98,7 @@ async def ws_get_shot(
 async def ws_filter_values(
     hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]
 ) -> None:
-    """Vorhandene Bohnen, Mühlen und Zubereitungen."""
+    """Vorhandene Bohnen, Mühlen, Zubereitungen und Profile."""
     if (store := _store(hass, connection, msg["id"])) is None:
         return
     connection.send_result(

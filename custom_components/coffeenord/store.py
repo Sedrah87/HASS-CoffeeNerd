@@ -40,6 +40,10 @@ SHOT_COLUMNS = (
     "ey",
     "rating",
     "peak_pressure",
+    "shape",
+    "main_flow",
+    "grind_hint",
+    "analysis",
     "has_curves",
     "curves",
     "payload",
@@ -65,6 +69,9 @@ SUMMARY_COLUMNS = (
     "ey",
     "rating",
     "peak_pressure",
+    "shape",
+    "main_flow",
+    "grind_hint",
     "has_curves",
 )
 _SUMMARY_SELECT = f"SELECT {', '.join(SUMMARY_COLUMNS)} FROM shots"
@@ -93,6 +100,10 @@ CREATE_STATEMENTS = (
         ey REAL,
         rating REAL,
         peak_pressure REAL,
+        shape TEXT,
+        main_flow REAL,
+        grind_hint TEXT,
+        analysis TEXT NOT NULL DEFAULT '{}',
         has_curves INTEGER NOT NULL DEFAULT 0,
         curves TEXT NOT NULL DEFAULT '{}',
         payload TEXT NOT NULL,
@@ -103,6 +114,14 @@ CREATE_STATEMENTS = (
     "CREATE INDEX IF NOT EXISTS idx_shots_bean ON shots (bean_name)",
     "CREATE INDEX IF NOT EXISTS idx_shots_mill ON shots (mill_name)",
     "CREATE INDEX IF NOT EXISTS idx_shots_preparation ON shots (preparation_name)",
+)
+
+# Spalten, die nach Version 1 dazugekommen sind: (Name, Typ) für ALTER TABLE.
+ADDED_COLUMNS = (
+    ("shape", "TEXT"),
+    ("main_flow", "REAL"),
+    ("grind_hint", "TEXT"),
+    ("analysis", "TEXT NOT NULL DEFAULT '{}'"),
 )
 
 
@@ -132,8 +151,10 @@ class ShotStore:
                     "SELECT value FROM meta WHERE key = 'db_version'"
                 ).fetchone()["value"]
             )
-            if version < 2:
-                _recalculate_curves(conn)
+            if version < DB_VERSION:
+                _add_missing_columns(conn)
+                _recalculate(conn)
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_shots_shape ON shots (shape)")
             conn.execute(
                 "UPDATE meta SET value = ? WHERE key = 'db_version'",
                 (str(DB_VERSION),),
@@ -169,7 +190,7 @@ class ShotStore:
         now = int(time.time())
         with self._lock, self._db as db:
             row = db.execute(
-                "SELECT updated_at FROM shots WHERE id = ?", (shot.id,)
+                "SELECT updated_at, payload FROM shots WHERE id = ?", (shot.id,)
             ).fetchone()
             if row is None:
                 columns = ("id", "received_at", *SHOT_COLUMNS)
@@ -179,7 +200,12 @@ class ShotStore:
                     (shot.id, now, *values),
                 )
                 return STATUS_CREATED
-            if shot.updated_at <= row["updated_at"]:
+            # Älterer Stand: nichts tun. Gleicher Stand mit anderen Daten (z. B. weil
+            # die App jetzt mehr mitschickt): übernehmen.
+            if shot.updated_at < row["updated_at"] or (
+                shot.updated_at == row["updated_at"]
+                and values[SHOT_COLUMNS.index("payload")] == row["payload"]
+            ):
                 return STATUS_UNCHANGED
             assignments = ", ".join(f"{column} = ?" for column in SHOT_COLUMNS)
             db.execute(
@@ -200,6 +226,7 @@ class ShotStore:
         shot.pop("payload")
         shot["has_curves"] = bool(shot["has_curves"])
         shot["curves"] = json.loads(shot["curves"])
+        shot["analysis"] = json.loads(shot["analysis"])
         return shot
 
     def list(
@@ -208,6 +235,7 @@ class ShotStore:
         bean: str | None = None,
         mill: str | None = None,
         preparation: str | None = None,
+        shape: str | None = None,
         brewed_from: int | None = None,
         brewed_to: int | None = None,
         limit: int = 50,
@@ -228,6 +256,9 @@ class ShotStore:
         if preparation is not None:
             conditions.append("preparation_name = ?")
             params.append(preparation)
+        if shape is not None:
+            conditions.append("shape = ?")
+            params.append(shape)
         if brewed_from is not None:
             conditions.append("brewed_at >= ?")
             params.append(brewed_from)
@@ -256,7 +287,7 @@ class ShotStore:
         return _summary(row) if row is not None else None
 
     def filter_values(self) -> dict[str, list[str]]:
-        """Vorhandene Bohnen, Mühlen und Zubereitungen für die Auswahllisten."""
+        """Vorhandene Bohnen, Mühlen, Zubereitungen und Profile für die Auswahl."""
         with self._lock:
             beans = self._db.execute(
                 "SELECT bean_name FROM shots WHERE bean_name IS NOT NULL "
@@ -271,10 +302,14 @@ class ShotStore:
                 "SELECT DISTINCT preparation_name FROM shots "
                 "WHERE preparation_name IS NOT NULL ORDER BY 1"
             ).fetchall()
+            shapes = self._db.execute(
+                "SELECT DISTINCT shape FROM shots WHERE shape IS NOT NULL ORDER BY 1"
+            ).fetchall()
         return {
             "beans": [row[0] for row in beans],
             "mills": [row[0] for row in mills],
             "preparations": [row[0] for row in preparations],
+            "shapes": [row[0] for row in shapes],
         }
 
     def delete(self, shot_id: str) -> bool:
@@ -298,37 +333,44 @@ def _shot_values(shot: Shot) -> tuple[Any, ...]:
     values: dict[str, Any] = {
         column: getattr(shot, column)
         for column in SHOT_COLUMNS
-        if column not in ("has_curves", "curves", "payload")
+        if column not in ("has_curves", "curves", "analysis", "payload")
     }
     values["has_curves"] = int(shot.has_curves)
     values["curves"] = json.dumps(shot.curves, separators=(",", ":"))
+    values["analysis"] = json.dumps(shot.analysis, separators=(",", ":"))
     values["payload"] = json.dumps(shot.payload, separators=(",", ":"))
     return tuple(values[column] for column in SHOT_COLUMNS)
 
 
-def _recalculate_curves(conn: sqlite3.Connection) -> None:
-    """Migration auf db_version 2: Kurven aus dem Rohdatensatz neu berechnen.
+def _add_missing_columns(conn: sqlite3.Connection) -> None:
+    """Spalten anlegen, die eine ältere Datenbank noch nicht hat."""
+    existing = {row["name"] for row in conn.execute("PRAGMA table_info(shots)")}
+    for name, definition in ADDED_COLUMNS:
+        if name not in existing:
+            conn.execute(f"ALTER TABLE shots ADD COLUMN {name} {definition}")
 
-    Version 1 las die Zeit aus brew_time und ließ Werte vor dem Tarieren stehen, die
-    Kurven sprangen dadurch zurück. Der Rohdatensatz ist unverändert gespeichert, darum
-    lassen sich alle Shots ohne neuen Upload korrigieren.
+
+def _recalculate(conn: sqlite3.Connection) -> None:
+    """Alle abgeleiteten Werte aus dem Rohdatensatz neu berechnen.
+
+    Läuft bei jeder neuen db_version. Version 2 korrigierte die Kurven (Zeit aus
+    timestamp statt brew_time, Werte vor dem Tarieren weg), Version 3 bringt die
+    Auswertung aus der App. Der Rohdatensatz ist unverändert gespeichert, darum ist
+    kein neuer Upload nötig. received_at und share_token bleiben erhalten.
     """
+    columns = [column for column in SHOT_COLUMNS if column != "payload"]
+    assignments = ", ".join(f"{column} = ?" for column in columns)
     rows = conn.execute("SELECT id, payload FROM shots").fetchall()
     for row in rows:
         try:
             shot = parse_shot(json.loads(row["payload"]))
         except Exception:  # noqa: BLE001 - ein kaputter Datensatz darf den Start nicht verhindern
-            _LOGGER.warning("Kurven von Shot %s nicht neu berechnet", row["id"])
+            _LOGGER.warning("Shot %s nicht neu berechnet", row["id"])
             continue
+        values = dict(zip(SHOT_COLUMNS, _shot_values(shot), strict=True))
         conn.execute(
-            "UPDATE shots SET curves = ?, has_curves = ?, peak_pressure = ? "
-            "WHERE id = ?",
-            (
-                json.dumps(shot.curves, separators=(",", ":")),
-                int(shot.has_curves),
-                shot.peak_pressure,
-                row["id"],
-            ),
+            f"UPDATE shots SET {assignments} WHERE id = ?",
+            (*(values[column] for column in columns), row["id"]),
         )
     if rows:
-        _LOGGER.info("Kurven von %s Shots neu berechnet", len(rows))
+        _LOGGER.info("%s Shots neu berechnet", len(rows))
