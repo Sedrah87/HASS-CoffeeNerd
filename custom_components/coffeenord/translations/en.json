@@ -1,0 +1,13 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Set up CoffeeNørd",
+        "description": "Receives shots from the CoffeeNørd app and shows them in Home Assistant. The app authenticates with a long-lived access token."
+      }
+    },
+    "abort": {
+      "single_instance_allowed": "CoffeeNørd is already set up."
+    }
+  }
+}

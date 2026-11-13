@@ -1,0 +1,13 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "CoffeeNørd einrichten",
+        "description": "Nimmt Shots aus der CoffeeNørd-App entgegen und zeigt sie in Home Assistant an. Die App meldet sich mit einem Long-Lived Access Token an."
+      }
+    },
+    "abort": {
+      "single_instance_allowed": "CoffeeNørd ist bereits eingerichtet."
+    }
+  }
+}
