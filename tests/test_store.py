@@ -85,3 +85,59 @@ def test_reopen_keeps_data(tmp_path: Path) -> None:
     second.open()
     assert second.count() == 1
     second.close()
+
+
+def _add(store: ShotStore, shot_id: str, brewed_at: int, **visualizer) -> None:
+    payload = make_shot(shot_id=shot_id, brewed_at=brewed_at, updated_at=brewed_at)
+    for section, values in visualizer.items():
+        payload["visualizer"][section].update(values)
+    store.upsert(parse_shot(payload))
+
+
+def test_list_newest_first_with_total(store: ShotStore) -> None:
+    for index in range(5):
+        _add(store, f"id-{index}", 1000 + index)
+
+    shots, total = store.list(limit=2, offset=1)
+
+    assert total == 5
+    assert [shot["id"] for shot in shots] == ["id-3", "id-2"]
+    assert "curves" not in shots[0]
+    assert shots[0]["has_curves"] is True
+
+
+def test_list_filters(store: ShotStore) -> None:
+    _add(store, "a", 1000, bean={"name": "Kenia"}, mill={"name": "Niche"})
+    _add(store, "b", 2000, bean={"name": "Brasil"}, mill={"name": "Niche"})
+    blend = make_shot(
+        shot_id="c", brewed_at=3000, updated_at=3000, bean2={"name": "Kenia"}
+    )
+    blend["visualizer"]["preparation"]["name"] = "V60"
+    store.upsert(parse_shot(blend))
+
+    assert {s["id"] for s in store.list(bean="Kenia")[0]} == {"a", "c"}
+    assert {s["id"] for s in store.list(mill="Niche")[0]} == {"a", "b"}
+    assert {s["id"] for s in store.list(preparation="V60")[0]} == {"c"}
+    assert {s["id"] for s in store.list(brewed_from=1500, brewed_to=2500)[0]} == {"b"}
+    assert store.list(bean="Kenia", mill="Niche")[1] == 1
+
+
+def test_latest_and_filter_values(store: ShotStore) -> None:
+    assert store.latest() is None
+    _add(store, "neu", 2000, bean={"name": "Brasil"})
+    _add(store, "alt", 1000, bean={"name": "Kenia"})
+
+    assert store.latest()["id"] == "neu"
+    assert store.filter_values() == {
+        "beans": ["Brasil", "Kenia"],
+        "mills": ["Testmühle"],
+        "preparations": ["Siebträger"],
+    }
+
+
+def test_delete(store: ShotStore) -> None:
+    _add(store, "weg", 1000)
+
+    assert store.delete("weg") is True
+    assert store.delete("weg") is False
+    assert store.count() == 0

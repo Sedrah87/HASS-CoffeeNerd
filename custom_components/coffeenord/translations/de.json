@@ -9,5 +9,12 @@
     "abort": {
       "single_instance_allowed": "CoffeeNørd ist bereits eingerichtet."
     }
+  },
+  "entity": {
+    "sensor": {
+      "latest_shot": {
+        "name": "Letzter Shot"
+      }
+    }
   }
 }

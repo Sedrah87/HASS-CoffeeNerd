@@ -18,3 +18,11 @@ STATUS_CREATED = "created"
 STATUS_UPDATED = "updated"
 STATUS_UNCHANGED = "unchanged"
 STATUS_ERROR = "error"
+
+# Event für Automationen, z. B. „Maschine nach dem Shot in den Standby“.
+EVENT_SHOT_RECEIVED = "coffeenord_shot_received"
+# Nur für Shots, die höchstens so alt sind. Der Erst-Import alter Brews würde
+# Automationen sonst hundertfach auslösen.
+EVENT_MAX_AGE_SECONDS = 3600
+# Dispatcher-Signal: Ein Shot wurde gespeichert oder gelöscht.
+SIGNAL_SHOTS_CHANGED = f"{DOMAIN}_shots_changed"
