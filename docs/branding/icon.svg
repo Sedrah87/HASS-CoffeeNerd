@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="192 200 640 640" width="640" height="640">
+  <!-- CoffeeNørd-Icon „Tropfen“ (wie in der App), Hintergrund transparent und eng beschnitten. -->
+  <path d="M512 210 L697.8 464.3 A230 230 0 1 1 326.2 464.3 Z" fill="#C9772F"/>
+  <path d="M512 470 C 462 540 562 640 512 730" fill="none" stroke="#F3EDE4" stroke-width="34" stroke-linecap="round"/>
+</svg>

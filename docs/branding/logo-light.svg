@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1080 320" width="1080" height="320">
+  <!-- Logo mit Schriftzug für das README (light). Quelle für docs/images/logo-light.png. -->
+  <g transform="translate(40 32) scale(0.4)">
+    <path d="M320 10 L505.8 264.3 A230 230 0 1 1 134.2 264.3 Z" fill="#C9772F"/>
+    <path d="M320 270 C 270 340 370 440 320 530" fill="none" stroke="#F3EDE4" stroke-width="34" stroke-linecap="round"/>
+  </g>
+  <text x="330" y="178" font-family="-apple-system, 'SF Pro Display', 'Helvetica Neue', Arial, sans-serif" font-size="132" font-weight="700" fill="#2B1F18" letter-spacing="-2">CoffeeNørd</text>
+  <text x="334" y="252" font-family="-apple-system, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif" font-size="52" font-weight="500" fill="#8A7868">für Home Assistant</text>
+</svg>
