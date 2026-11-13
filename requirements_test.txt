@@ -1,3 +1,5 @@
 # Bringt die passende Home-Assistant-Version mit (0.13.375 → homeassistant 2026.10.4).
 pytest-homeassistant-custom-component==0.13.375
+# Für das Panel (Komponenten frontend/panel_custom), Version wie in HA 2026.10.4.
+home-assistant-frontend==20260930.5
 ruff

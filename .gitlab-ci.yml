@@ -38,6 +38,23 @@ python:
     - ruff format --check .
     - pytest -q
 
+frontend:
+  stage: testen
+  image: node:lts
+  cache:
+    key: npm-$CI_JOB_NAME
+    paths: [.cache/npm]
+  script:
+    - cd frontend
+    - npm ci --cache "$CI_PROJECT_DIR/.cache/npm" --no-fund --no-audit
+    - npm run typecheck
+    - npm run lint
+    - npm run build
+    - npm run licenses
+    - cd ..
+    # Das eingecheckte Bundle muss zum Quellcode passen (HACS installiert nur custom_components/).
+    - git diff --exit-code -- custom_components/coffeenord/frontend
+
 github:
   stage: spiegeln
   image:

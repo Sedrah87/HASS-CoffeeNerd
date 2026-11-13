@@ -1,0 +1,86 @@
+// Texte des Panels. Sprache folgt Home Assistant, alles außer Deutsch fällt auf Englisch zurück.
+
+const de = {
+  title: "Shots",
+  filter_bean: "Bohne",
+  filter_mill: "Mühle",
+  filter_preparation: "Zubereitung",
+  filter_from: "Von",
+  filter_to: "Bis",
+  filter_all: "Alle",
+  filter_reset: "Filter zurücksetzen",
+  empty: "Noch keine Shots. Die App lädt sie hoch, sobald Home Assistant als Ziel eingerichtet ist.",
+  empty_filtered: "Keine Shots für diese Filter.",
+  load_more: "Weitere laden",
+  count: "{shown} von {total}",
+  back: "Zurück",
+  delete: "Löschen",
+  delete_confirm: "Diesen Shot wirklich löschen?",
+  error: "Fehler beim Laden: {message}",
+  dose: "Dosis",
+  yield: "Ausbeute",
+  ratio: "Verhältnis",
+  time: "Zeit",
+  grind: "Mahlgrad",
+  rating: "Bewertung",
+  peak_pressure: "Spitzendruck",
+  tds: "TDS",
+  ey: "Extraktion",
+  roaster: "Rösterei",
+  no_curves: "Für diesen Shot gibt es keine Kurven.",
+  chart_weight: "Gewicht",
+  chart_flow: "Fluss",
+  chart_pressure: "Druck",
+  chart_temperature: "Temperatur",
+  scale_1: "Waage 1",
+  scale_2: "Waage 2",
+  table_toggle: "Messwerte als Tabelle",
+  table_time: "Zeit (s)",
+};
+
+const en: typeof de = {
+  title: "Shots",
+  filter_bean: "Bean",
+  filter_mill: "Grinder",
+  filter_preparation: "Preparation",
+  filter_from: "From",
+  filter_to: "To",
+  filter_all: "All",
+  filter_reset: "Reset filters",
+  empty: "No shots yet. The app uploads them once Home Assistant is set up as a target.",
+  empty_filtered: "No shots match these filters.",
+  load_more: "Load more",
+  count: "{shown} of {total}",
+  back: "Back",
+  delete: "Delete",
+  delete_confirm: "Really delete this shot?",
+  error: "Loading failed: {message}",
+  dose: "Dose",
+  yield: "Yield",
+  ratio: "Ratio",
+  time: "Time",
+  grind: "Grind size",
+  rating: "Rating",
+  peak_pressure: "Peak pressure",
+  tds: "TDS",
+  ey: "Extraction",
+  roaster: "Roaster",
+  no_curves: "There are no curves for this shot.",
+  chart_weight: "Weight",
+  chart_flow: "Flow",
+  chart_pressure: "Pressure",
+  chart_temperature: "Temperature",
+  scale_1: "Scale 1",
+  scale_2: "Scale 2",
+  table_toggle: "Measurements as table",
+  table_time: "Time (s)",
+};
+
+export type TextKey = keyof typeof de;
+export type Translate = (key: TextKey, values?: Record<string, string | number>) => string;
+
+export function translator(language: string | undefined): Translate {
+  const texts = language?.toLowerCase().startsWith("de") ? de : en;
+  return (key, values) =>
+    texts[key].replace(/\{(\w+)\}/g, (_, name: string) => String(values?.[name] ?? ""));
+}
