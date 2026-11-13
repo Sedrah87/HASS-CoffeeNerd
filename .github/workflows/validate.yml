@@ -20,7 +20,6 @@ jobs:
       - uses: hacs/action@main
         with:
           category: integration
-          # brands: Icon unter custom_components/coffeenord/brand/ fehlt noch.
           # license: PolyForm Noncommercial ist keine OSI-Lizenz. Das ist bewusst so,
           # darum gibt es die Integration nur als benutzerdefiniertes HACS-Repository.
-          ignore: brands license
+          ignore: license
