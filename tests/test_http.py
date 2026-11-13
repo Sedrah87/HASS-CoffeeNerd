@@ -1,5 +1,6 @@
 """Tests für die Upload-Endpunkte."""
 
+import json
 from http import HTTPStatus
 from pathlib import Path
 
@@ -118,3 +119,22 @@ async def test_unavailable_after_unload(
     response = await client.post(SHOTS_URL, json=make_shot())
 
     assert response.status == HTTPStatus.SERVICE_UNAVAILABLE
+
+
+async def test_batch_body_in_chunks(hass_client, setup_integration) -> None:
+    """Große Bodies kommen übers Netz in mehreren Stücken an, nicht am Stück."""
+    client = await hass_client()
+    shots = [make_shot(shot_id=f"chunk-{i}", padding="x" * 50_000) for i in range(10)]
+    body = json.dumps({"shots": shots}).encode()
+
+    async def stuecke():
+        for start in range(0, len(body), 16_384):
+            yield body[start : start + 16_384]
+
+    response = await client.post(
+        BATCH_URL, data=stuecke(), headers={"Content-Type": "application/json"}
+    )
+
+    assert response.status == HTTPStatus.OK
+    results = (await response.json())["results"]
+    assert [r["status"] for r in results] == ["created"] * 10

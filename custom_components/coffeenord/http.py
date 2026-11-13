@@ -52,13 +52,24 @@ async def _read_json(
     Liefert (daten, None) oder (None, fehlerantwort).
     """
     if request.content_length is not None and request.content_length > max_bytes:
+        _LOGGER.warning(
+            "Upload abgelehnt: %s Bytes, erlaubt sind %s",
+            request.content_length,
+            max_bytes,
+        )
         return None, _error("Payload zu groß", HTTPStatus.REQUEST_ENTITY_TOO_LARGE)
-    body = await request.content.read(max_bytes + 1)
-    if len(body) > max_bytes:
-        return None, _error("Payload zu groß", HTTPStatus.REQUEST_ENTITY_TOO_LARGE)
+    # content.read(n) liefert nur, was gerade gepuffert ist. Große Bodies kommen übers
+    # Netz in mehreren Stücken an, darum bis zum Ende weiterlesen.
+    body = bytearray()
+    async for part in request.content.iter_chunked(64 * 1024):
+        body.extend(part)
+        if len(body) > max_bytes:
+            _LOGGER.warning("Upload abgelehnt: mehr als %s Bytes", max_bytes)
+            return None, _error("Payload zu groß", HTTPStatus.REQUEST_ENTITY_TOO_LARGE)
     try:
         return json.loads(body), None
-    except ValueError:
+    except ValueError as err:
+        _LOGGER.warning("Upload abgelehnt: ungültiges JSON (%s)", err)
         return None, _error("Ungültiges JSON", HTTPStatus.BAD_REQUEST)
 
 
@@ -87,9 +98,11 @@ class ShotUploadView(HomeAssistantView):
         try:
             shot = parse_shot(data)
         except vol.Invalid as err:
+            _LOGGER.warning("Shot abgelehnt: %s", err)
             return _error(f"Ungültiger Shot: {err}", HTTPStatus.BAD_REQUEST)
 
         status = await async_save_shot(hass, store, shot)
+        _LOGGER.debug("Shot %s: %s", shot.id, status)
         return self.json({"shot_id": shot.id, "status": status})
 
 
@@ -127,6 +140,7 @@ class ShotBatchUploadView(HomeAssistantView):
         for item in shots:
             shot_id = item.get("shot_id") if isinstance(item, dict) else None
             if len(json.dumps(item, separators=(",", ":"))) > MAX_SHOT_BYTES:
+                _LOGGER.warning("Shot %s abgelehnt: größer als 2 MB", shot_id)
                 results.append(
                     {
                         "shot_id": shot_id,
@@ -138,6 +152,7 @@ class ShotBatchUploadView(HomeAssistantView):
             try:
                 shot = parse_shot(item)
             except vol.Invalid as err:
+                _LOGGER.warning("Shot %s abgelehnt: %s", shot_id, err)
                 results.append(
                     {"shot_id": shot_id, "status": STATUS_ERROR, "error": str(err)}
                 )
@@ -145,4 +160,9 @@ class ShotBatchUploadView(HomeAssistantView):
             status = await async_save_shot(hass, store, shot)
             results.append({"shot_id": shot.id, "status": status})
 
+        _LOGGER.debug(
+            "Batch mit %s Shots: %s",
+            len(shots),
+            ", ".join(f"{r['shot_id']}={r['status']}" for r in results),
+        )
         return self.json({"results": results})
