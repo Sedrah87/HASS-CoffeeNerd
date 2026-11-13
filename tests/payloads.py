@@ -67,3 +67,23 @@ def make_shot(**overrides: Any) -> dict[str, Any]:
     shot = copy.deepcopy(BASE_SHOT)
     shot.update(overrides)
     return shot
+
+
+# Auswertung, wie die App sie mitschickt (Werte frei erfunden).
+ANALYSIS: dict[str, Any] = {
+    "version": 1,
+    "shape": "SLOW_START",
+    "first_drip_s": 5.42,
+    "end_s": 34.07,
+    "main_flow": 1.11,
+    "first_third_flow": 0.31,
+    "last_third_flow": 2.01,
+    "peak_flow": 2.2,
+    "max_rise_2s": 0.45,
+    "grind_hint": "Zu langsam. Zurück auf 19.",
+    "anomaly_reason": "",
+}
+
+
+def make_shot_with_analysis(**overrides: Any) -> dict[str, Any]:
+    return make_shot(analysis=copy.deepcopy(ANALYSIS), **overrides)

@@ -30,6 +30,9 @@ EVENT_FIELDS = (
     "brew_time_s",
     "ratio",
     "peak_pressure",
+    "shape",
+    "main_flow",
+    "grind_hint",
 )
 
 

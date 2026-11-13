@@ -34,6 +34,10 @@ curves for weight, flow, pressure and temperature. UI in German and English.*
 - **Panel „Shots“** in der Seitenleiste: Liste mit Filtern nach Bohne, Mühle, Zubereitung und Zeitraum.
   Die Detailansicht zeigt die Kennzahlen, die Kurven mit gekoppeltem Zoom und Fadenkreuz und die
   Messwerte als Tabelle.
+- **Auswertung für den Mahlgrad:** Die App schickt ihre Shot-Auswertung mit: Profil (gleichmäßig,
+  ansteigend, langsamer Start, Channeling, viel zu schnell), Fluss in der Hauptphase und den Dritteln,
+  erster Tropfen, Pumpenende und den Hinweis zum Mahlgrad. Erster Tropfen und Pumpenende erscheinen
+  als Linien in den Kurven, die Liste lässt sich nach Profil filtern.
 - **Alte Brews mitnehmen:** Die App lädt auf Wunsch die ganze Historie hoch, auch Brews ohne Kurven.
   Mehrfaches Hochladen erzeugt keine Duplikate, ein bearbeiteter Brew wird aktualisiert.
 - **Blend-Shots** mit zwei Bohnen und **zwei Waagen** werden unterstützt.
@@ -91,7 +95,8 @@ Neue und bearbeitete Brews lädt die App danach beim Speichern automatisch hoch.
 ## Sensor und Event
 
 Der Sensor **Letzter Shot** (Gerät *CoffeeNørd*) zeigt den Zeitpunkt des zuletzt gebrühten Shots.
-Bohne, Mühle, Zubereitung, Dosis, Ausbeute, Zeit, Verhältnis, Mahlgrad und Spitzendruck stehen als
+Bohne, Mühle, Zubereitung, Dosis, Ausbeute, Zeit, Verhältnis, Mahlgrad, Spitzendruck, Profil
+(`shape`), Fluss der Hauptphase (`main_flow`) und der Hinweis zum Mahlgrad (`grind_hint`) stehen als
 Attribute dabei.
 
 Das Event `coffeenord_shot_received` kommt nur bei **neuen** Shots, die höchstens eine Stunde alt sind.
@@ -113,7 +118,25 @@ automation:
 ```
 
 Im Event stehen `shot_id`, `brewed_at`, `bean_name`, `bean2_name`, `mill_name`, `preparation_name`,
-`preparation_style`, `grind_size`, `dose_g`, `yield_g`, `brew_time_s`, `ratio` und `peak_pressure`.
+`preparation_style`, `grind_size`, `dose_g`, `yield_g`, `brew_time_s`, `ratio`, `peak_pressure`,
+`shape`, `main_flow` und `grind_hint`. Den Hinweis zum Mahlgrad kannst du dir so z. B. nach jedem Shot
+aufs Handy schicken:
+
+```yaml
+automation:
+  - alias: "Mahlgrad-Hinweis nach dem Shot"
+    triggers:
+      - trigger: event
+        event_type: coffeenord_shot_received
+    conditions:
+      - condition: template
+        value_template: "{{ trigger.event.data.grind_hint is not none }}"
+    actions:
+      - action: notify.mobile_app_mein_handy
+        data:
+          title: "{{ trigger.event.data.bean_name }}"
+          message: "{{ trigger.event.data.grind_hint }}"
+```
 
 ## Schnittstelle
 
@@ -134,12 +157,17 @@ Ein Shot ist ein Umschlag um das Visualizer-JSON der App. Der Schlüssel ist die
   "brewed_at": 1762941151,
   "updated_at": 1762941300,
   "visualizer": { "bean": {}, "brew": {}, "mill": {}, "preparation": {}, "brewFlow": {} },
-  "bean2": { "name": "…" }
+  "bean2": { "name": "…" },
+  "analysis": { "shape": "SLOW_START", "main_flow": 1.11, "first_drip_s": 5.4, "end_s": 34.1,
+                "grind_hint": "Zu langsam …" }
 }
 ```
 
-Die Antwort ist `created`, `updated` oder `unchanged`. `unchanged` heißt: `updated_at` ist nicht
-neuer als der gespeicherte Stand. Ein Shot darf höchstens 2 MB groß sein. Ausprobieren ohne App:
+`analysis` ist optional. Die Integration zeigt die Werte nur an und rechnet selbst nichts aus.
+
+Die Antwort ist `created`, `updated` oder `unchanged`. `unchanged` heißt: Der Stand ist älter als der
+gespeicherte, oder er ist gleich alt und die Daten sind identisch. Bei gleichem `updated_at` mit
+anderen Daten (z. B. weil die App jetzt die Auswertung mitschickt) wird der Shot aktualisiert. Ein Shot darf höchstens 2 MB groß sein. Ausprobieren ohne App:
 
 ```sh
 curl -X POST "http://homeassistant.local:8123/api/coffeenord/shots" \

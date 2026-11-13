@@ -7,6 +7,7 @@ import {
   DataZoomComponent,
   GridComponent,
   LegendComponent,
+  MarkLineComponent,
   TitleComponent,
   TooltipComponent,
 } from "echarts/components";
@@ -22,10 +23,17 @@ echarts.use([
   GridComponent,
   TooltipComponent,
   LegendComponent,
+  MarkLineComponent,
   DataZoomComponent,
   TitleComponent,
   CanvasRenderer,
 ]);
+
+/** Senkrechte Markierung auf der Zeitachse, z. B. erster Tropfen. */
+export interface ChartMarker {
+  time: number;
+  label: string;
+}
 
 // Kategoriale Farben (Dataviz-Referenzpalette, Slot 1 und 2), geprüft gegen die
 // HASS-Kartenhintergründe #ffffff und #1c1c1c: Waage 1 blau, Waage 2 orange.
@@ -57,12 +65,14 @@ const ZOOM_HEIGHT = 56;
 export class ShotChart extends LitElement {
   static properties = {
     curves: { attribute: false },
+    markers: { attribute: false },
     dark: { type: Boolean },
     language: { type: String },
     t: { attribute: false },
   };
 
   declare curves: Curves;
+  declare markers: ChartMarker[];
   declare dark: boolean;
   declare language: string;
   declare t: Translate;
@@ -92,7 +102,10 @@ export class ShotChart extends LitElement {
   }
 
   protected updated(changed: PropertyValues): void {
-    if (this.chart && (changed.has("curves") || changed.has("dark") || changed.has("t"))) {
+    if (
+      this.chart &&
+      (changed.has("curves") || changed.has("markers") || changed.has("dark") || changed.has("t"))
+    ) {
       this.draw();
     }
   }
@@ -144,10 +157,11 @@ export class ShotChart extends LitElement {
     }));
     const axisIndexes = panels.map((_, index) => index);
 
+    const markers = this.markers ?? [];
     const series = panels.flatMap((panel, index) =>
       panel.curves
         .filter((name): name is CurveName => Boolean(name && this.curves[name]?.length))
-        .map((name) => {
+        .map((name, seriesIndex) => {
           const second = name.endsWith("2");
           return {
             type: "line" as const,
@@ -159,6 +173,20 @@ export class ShotChart extends LitElement {
             lineStyle: { width: 2 },
             itemStyle: { color: colors[second ? 1 : 0] },
             emphasis: { disabled: true },
+            // Markierungen einmal pro Diagramm, beschriftet nur im obersten.
+            markLine:
+              seriesIndex === 0 && markers.length
+                ? {
+                    silent: true,
+                    symbol: "none",
+                    animation: false,
+                    lineStyle: { color: muted, type: "dashed", width: 1 },
+                    label: index === 0
+                      ? { show: true, position: "end", color: muted, formatter: "{b}" }
+                      : { show: false },
+                    data: markers.map((marker) => ({ name: marker.label, xAxis: marker.time })),
+                  }
+                : undefined,
             tooltip: {
               valueFormatter: (value: unknown) =>
                 `${new Intl.NumberFormat(this.language, { maximumFractionDigits: 2 }).format(

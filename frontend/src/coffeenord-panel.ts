@@ -4,7 +4,7 @@
 import { css, html, LitElement, nothing, type PropertyValues } from "lit";
 
 import { dateInputToUnix, formatDateTime, formatNumber } from "./format";
-import { translator, type Translate } from "./i18n";
+import { shapeLabel, translator, type Translate } from "./i18n";
 import "./shot-chart";
 import type { CurveName, FilterValues, HomeAssistant, ShotDetail, ShotList, ShotSummary } from "./types";
 
@@ -14,11 +14,12 @@ interface Filters {
   bean: string;
   mill: string;
   preparation: string;
+  shape: string;
   from: string;
   to: string;
 }
 
-const NO_FILTERS: Filters = { bean: "", mill: "", preparation: "", from: "", to: "" };
+const NO_FILTERS: Filters = { bean: "", mill: "", preparation: "", shape: "", from: "", to: "" };
 
 const TABLE_COLUMNS: { curve: CurveName; label: "chart_weight" | "chart_flow" | "chart_pressure" | "chart_temperature"; unit: string; second?: boolean }[] = [
   { curve: "weight", label: "chart_weight", unit: "g" },
@@ -56,7 +57,7 @@ class CoffeeNordPanel extends LitElement {
 
   constructor() {
     super();
-    this.filterValues = { beans: [], mills: [], preparations: [] };
+    this.filterValues = { beans: [], mills: [], preparations: [], shapes: [] };
     this.filters = { ...NO_FILTERS };
     this.shots = [];
     this.total = 0;
@@ -88,7 +89,9 @@ class CoffeeNordPanel extends LitElement {
 
   private async loadFilterValues(): Promise<void> {
     try {
-      this.filterValues = await this.hass.callWS<FilterValues>({ type: "coffeenord/filters" });
+      const values = await this.hass.callWS<FilterValues>({ type: "coffeenord/filters" });
+      // Ältere Integrationen ohne Profile liefern kein "shapes".
+      this.filterValues = { ...values, shapes: values.shapes ?? [] };
     } catch (err) {
       this.showError(err);
     }
@@ -105,6 +108,7 @@ class CoffeeNordPanel extends LitElement {
       if (this.filters.bean) message.bean = this.filters.bean;
       if (this.filters.mill) message.mill = this.filters.mill;
       if (this.filters.preparation) message.preparation = this.filters.preparation;
+      if (this.filters.shape) message.shape = this.filters.shape;
       const from = dateInputToUnix(this.filters.from, false);
       const to = dateInputToUnix(this.filters.to, true);
       if (from !== undefined) message.from = from;
@@ -170,14 +174,20 @@ class CoffeeNordPanel extends LitElement {
     `;
   }
 
-  private renderSelect(key: "bean" | "mill" | "preparation", label: string, options: string[]) {
+  private renderSelect(
+    key: "bean" | "mill" | "preparation" | "shape",
+    label: string,
+    options: string[],
+    optionLabel: (option: string) => string = (option) => option,
+  ) {
     return html`
       <label>
         <span>${label}</span>
         <select @change=${(e: Event) => this.setFilter(key, (e.target as HTMLSelectElement).value)}>
           <option value="" ?selected=${!this.filters[key]}>${this.t("filter_all")}</option>
           ${options.map(
-            (option) => html`<option .value=${option} ?selected=${this.filters[key] === option}>${option}</option>`,
+            (option) =>
+              html`<option .value=${option} ?selected=${this.filters[key] === option}>${optionLabel(option)}</option>`,
           )}
         </select>
       </label>
@@ -205,6 +215,9 @@ class CoffeeNordPanel extends LitElement {
         ${this.renderSelect("bean", t("filter_bean"), this.filterValues.beans)}
         ${this.renderSelect("mill", t("filter_mill"), this.filterValues.mills)}
         ${this.renderSelect("preparation", t("filter_preparation"), this.filterValues.preparations)}
+        ${this.filterValues.shapes.length
+          ? this.renderSelect("shape", t("filter_shape"), this.filterValues.shapes, (shape) => shapeLabel(t, shape))
+          : nothing}
         ${this.renderDate("from", t("filter_from"))} ${this.renderDate("to", t("filter_to"))}
         ${filtered ? html`<button class="link" @click=${this.resetFilters}>${t("filter_reset")}</button>` : nothing}
       </div>
@@ -228,7 +241,14 @@ class CoffeeNordPanel extends LitElement {
   private renderRow(shot: ShotSummary) {
     const language = this.language;
     const bean = [shot.bean_name, shot.bean2_name].filter(Boolean).join(" + ") || "–";
-    const meta = [shot.preparation_name, shot.mill_name, shot.grind_size].filter(Boolean).join(" · ");
+    const meta = [
+      shot.preparation_name,
+      shot.mill_name,
+      shot.grind_size,
+      shot.shape ? shapeLabel(this.t, shot.shape) : null,
+    ]
+      .filter(Boolean)
+      .join(" · ");
     return html`
       <li>
         <button class="row" @click=${() => this.openShot(shot.id)}>
@@ -277,11 +297,13 @@ class CoffeeNordPanel extends LitElement {
           ${facts.map(([label, value]) => html`<div><dt>${label}</dt><dd>${value}</dd></div>`)}
         </dl>
       </section>
+      ${this.renderAnalysis(shot)}
       <section class="card">
         ${shot.has_curves
           ? html`
               <coffeenord-shot-chart
                 .curves=${shot.curves}
+                .markers=${this.markers(shot)}
                 .dark=${Boolean(this.hass.themes?.darkMode)}
                 .language=${language}
                 .t=${t}
@@ -289,6 +311,53 @@ class CoffeeNordPanel extends LitElement {
               ${this.renderTable(shot)}
             `
           : html`<p class="empty">${t("no_curves")}</p>`}
+      </section>
+    `;
+  }
+
+  /** Erster Tropfen und Pumpenende als senkrechte Linien: dazwischen liegt die Hauptphase. */
+  private markers(shot: ShotDetail): { time: number; label: string }[] {
+    const analysis = shot.analysis ?? {};
+    const markers: { time: number; label: string }[] = [];
+    if (analysis.first_drip_s !== undefined) markers.push({ time: analysis.first_drip_s, label: this.t("first_drip") });
+    if (analysis.end_s !== undefined) markers.push({ time: analysis.end_s, label: this.t("pump_end") });
+    return markers;
+  }
+
+  /** Auswertung der App (Profil, Fluss, Mahlgrad-Hinweis). Fehlt sie, entfällt die Karte. */
+  private renderAnalysis(shot: ShotDetail) {
+    const t = this.t;
+    const language = this.language;
+    const analysis = shot.analysis ?? {};
+    const flow = (value: number | undefined) =>
+      value !== undefined ? `${formatNumber(language, value, 2)} g/s` : "–";
+    const seconds = (value: number | undefined) =>
+      value !== undefined ? `${formatNumber(language, value)} s` : "–";
+    const facts: [string, string][] = [
+      [t("shape"), shapeLabel(t, analysis.shape)],
+      [t("main_flow"), flow(analysis.main_flow)],
+      [t("first_third_flow"), flow(analysis.first_third_flow)],
+      [t("last_third_flow"), flow(analysis.last_third_flow)],
+      [t("peak_flow"), flow(analysis.peak_flow)],
+      [t("first_drip"), seconds(analysis.first_drip_s)],
+      [t("pump_end"), seconds(analysis.end_s)],
+    ];
+    const hasNumbers = facts.some(([, value]) => value !== "–");
+    if (!hasNumbers && !analysis.grind_hint && !analysis.anomaly_reason) return nothing;
+    return html`
+      <section class="card">
+        <h3>${t("analysis_title")}</h3>
+        ${analysis.grind_hint
+          ? html`<p class="hint"><strong>${t("grind_hint")}:</strong> ${analysis.grind_hint}</p>`
+          : nothing}
+        ${analysis.anomaly_reason
+          ? html`<p class="hint"><strong>${t("anomaly_reason")}:</strong> ${analysis.anomaly_reason}</p>`
+          : nothing}
+        ${hasNumbers
+          ? html`<dl class="facts">
+              ${facts.map(([label, value]) => html`<div><dt>${label}</dt><dd>${value}</dd></div>`)}
+            </dl>`
+          : nothing}
       </section>
     `;
   }
@@ -501,6 +570,15 @@ class CoffeeNordPanel extends LitElement {
       margin: 0;
       font-size: 20px;
       font-weight: 500;
+    }
+    h3 {
+      margin: 0;
+      font-size: 16px;
+      font-weight: 500;
+    }
+    .hint {
+      margin: 12px 0 0;
+      line-height: 1.4;
     }
     .facts {
       display: grid;

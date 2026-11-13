@@ -36,6 +36,22 @@ const de = {
   scale_2: "Waage 2",
   table_toggle: "Messwerte als Tabelle",
   table_time: "Zeit (s)",
+  filter_shape: "Profil",
+  analysis_title: "Auswertung",
+  shape: "Profil",
+  main_flow: "Fluss Hauptphase",
+  first_third_flow: "Fluss erstes Drittel",
+  last_third_flow: "Fluss letztes Drittel",
+  peak_flow: "Spitzenfluss",
+  first_drip: "Erster Tropfen",
+  pump_end: "Pumpe aus",
+  grind_hint: "Hinweis zum Mahlgrad",
+  anomaly_reason: "Als Ausreißer markiert",
+  shape_STABLE: "Gleichmäßig",
+  shape_RISING: "Ansteigend",
+  shape_SLOW_START: "Langsamer Start",
+  shape_CHANNELING: "Channeling",
+  shape_GUSHER: "Viel zu schnell",
 };
 
 const en: typeof de = {
@@ -74,10 +90,33 @@ const en: typeof de = {
   scale_2: "Scale 2",
   table_toggle: "Measurements as table",
   table_time: "Time (s)",
+  filter_shape: "Profile",
+  analysis_title: "Analysis",
+  shape: "Profile",
+  main_flow: "Main phase flow",
+  first_third_flow: "Flow first third",
+  last_third_flow: "Flow last third",
+  peak_flow: "Peak flow",
+  first_drip: "First drop",
+  pump_end: "Pump off",
+  grind_hint: "Grind hint",
+  anomaly_reason: "Marked as outlier",
+  shape_STABLE: "Even",
+  shape_RISING: "Rising",
+  shape_SLOW_START: "Slow start",
+  shape_CHANNELING: "Channeling",
+  shape_GUSHER: "Far too fast",
 };
 
 export type TextKey = keyof typeof de;
 export type Translate = (key: TextKey, values?: Record<string, string | number>) => string;
+
+/** Anzeigename eines Profils. Unbekannte (neuere) Profile erscheinen unübersetzt. */
+export function shapeLabel(t: Translate, shape: string | null | undefined): string {
+  if (!shape) return "–";
+  const key = `shape_${shape}`;
+  return key in de ? t(key as TextKey) : shape;
+}
 
 export function translator(language: string | undefined): Translate {
   const texts = language?.toLowerCase().startsWith("de") ? de : en;

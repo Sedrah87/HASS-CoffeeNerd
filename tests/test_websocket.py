@@ -4,7 +4,7 @@ from homeassistant.core import HomeAssistant
 
 from custom_components.coffeenord.models import parse_shot
 
-from .payloads import make_shot
+from .payloads import make_shot, make_shot_with_analysis
 
 
 async def _send(ws, message: dict) -> dict:
@@ -74,3 +74,22 @@ async def test_not_loaded(
 
     assert not result["success"]
     assert result["error"]["code"] == "not_loaded"
+
+
+async def test_list_by_shape_and_analysis_in_detail(
+    hass: HomeAssistant, hass_ws_client, setup_integration
+) -> None:
+    store = setup_integration.runtime_data
+    store.upsert(parse_shot(make_shot_with_analysis(shot_id="a")))
+    store.upsert(parse_shot(make_shot(shot_id="b")))
+    ws = await hass_ws_client(hass)
+
+    result = await _send(ws, {"type": "coffeenord/shots/list", "shape": "SLOW_START"})
+    assert [shot["id"] for shot in result["result"]["shots"]] == ["a"]
+    assert result["result"]["shots"][0]["main_flow"] == 1.11
+
+    result = await _send(ws, {"type": "coffeenord/shots/get", "shot_id": "a"})
+    assert result["result"]["analysis"]["first_drip_s"] == 5.42
+
+    result = await _send(ws, {"type": "coffeenord/filters"})
+    assert result["result"]["shapes"] == ["SLOW_START"]

@@ -55,16 +55,24 @@ höchstens 20 pro Request). Ein Shot ist ein Umschlag um das vorhandene Visualiz
   "updated_at": 1762941300,
   "visualizer": { "bean": {}, "brew": {}, "mill": {}, "preparation": {}, "water": {},
                   "brewFlow": {}, "application": "COFFEENORD" },
-  "bean2": { "name": "...", "roaster": "...", "weight_in": 9.0 }
+  "bean2": { "name": "...", "roaster": "...", "weight_in": 9.0 },
+  "analysis": { "version": 1, "shape": "SLOW_START", "first_drip_s": 5.42, "end_s": 34.07,
+                "main_flow": 1.11, "first_third_flow": 0.31, "last_third_flow": 2.01,
+                "peak_flow": 2.2, "max_rise_2s": 0.45, "grind_hint": "...", "anomaly_reason": "" }
 }
 ```
 
 - `shot_id` ist Pflicht und bleibt dauerhaft der Schlüssel. Ein erneuter Upload überschreibt den Shot.
-  Ist `updated_at` nicht neuer als der gespeicherte Wert, wird nichts geändert (`unchanged`).
+  Ist `updated_at` älter als der gespeicherte Wert, oder gleich alt mit identischen Daten, wird nichts
+  geändert (`unchanged`). Gleich alt mit anderen Daten wird übernommen, damit die App nach einer
+  Erweiterung des Formats alles neu schicken kann.
 - `brewed_at` und `updated_at` sind Unix-Sekunden aus `brew.config`. Die Kurven enthalten in
   `timestamp` nur die Uhrzeit, darum kommt das Datum ausschließlich aus `brewed_at`. Für die
   Zeitachse der Kurven ist `timestamp` dagegen die richtige Quelle (siehe Speicherung).
 - `bean2` gibt es nur bei Blend-Shots, weil das Visualizer-Format nur eine Bohne kennt.
+- `analysis` (seit 0.2.0, optional) ist die Shot-Auswertung der App für den Mahlgradvorschlag. Die
+  Integration übernimmt nur bekannte Felder und rechnet nichts selbst aus, damit kein App-Code (GPLv3)
+  nötig ist. `shape: "UNKNOWN"` gilt als „keine Auswertung“.
 - `brewFlow` darf fehlen oder leer sein, z. B. bei alten Filter-Brews oder ohne Waage. Der Shot
   wird trotzdem gespeichert, dann eben ohne Kurven.
 - Unbekannte Felder werden nicht abgelehnt, sie bleiben im Rohdatensatz erhalten. So kann die App
@@ -90,12 +98,15 @@ Tabelle `shots`:
 | `mill_name`, `preparation_name`, `preparation_style` | für Filter und Liste |
 | `grind_size`, `dose_g`, `yield_g`, `brew_time_s`, `ratio`, `tds`, `ey`, `rating` | Kennzahlen |
 | `peak_pressure`, `has_curves` | aus den Kurven berechnet |
+| `shape`, `main_flow`, `grind_hint` | aus `analysis`, für Liste, Filter, Sensor und Event |
+| `analysis` TEXT | übernommene Auswertung als JSON |
 | `curves` TEXT | aufbereitete Kurven als JSON (siehe unten) |
 | `payload` TEXT | vollständiger Rohdatensatz, wie hochgeladen |
 | `share_token` TEXT NULL UNIQUE | für späteres Teilen, vorerst immer leer |
 
 Dazu eine Tabelle `meta` (`key`, `value`) mit `db_version`, damit spätere Schema-Änderungen per
-Migration laufen. Version 2 berechnet beim Start die Kurven aller Shots aus dem Rohdatensatz neu. Indizes auf `brewed_at`, `bean_name`, `mill_name` und `preparation_name`.
+Migration laufen. Bei jeder neuen Version werden fehlende Spalten angelegt und alle abgeleiteten Werte
+aus dem Rohdatensatz neu berechnet (Version 2: Kurven, Version 3: Auswertung). Indizes auf `brewed_at`, `bean_name`, `mill_name` und `preparation_name`.
 
 Aufbereitete Kurven: Jede Reihe wird als `[[sekunden, wert], ...]` gespeichert. `sekunden` zählt ab
 dem frühesten Messpunkt des Shots und kommt aus `timestamp` (Uhrzeit `HH:MM:SS.mmm`, auch über

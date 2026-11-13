@@ -25,6 +25,7 @@ ENVELOPE_SCHEMA = vol.Schema(
         vol.Optional("updated_at"): vol.All(vol.Coerce(int), vol.Range(min=0)),
         vol.Required("visualizer"): dict,
         vol.Optional("bean2"): vol.Any(None, dict),
+        vol.Optional("analysis"): vol.Any(None, dict),
     },
     extra=vol.ALLOW_EXTRA,
 )
@@ -63,6 +64,10 @@ class Shot:
     ey: float | None = None
     rating: float | None = None
     peak_pressure: float | None = None
+    shape: str | None = None
+    main_flow: float | None = None
+    grind_hint: str | None = None
+    analysis: dict[str, Any] = field(default_factory=dict)
     curves: dict[str, list[list[float]]] = field(default_factory=dict)
     payload: dict[str, Any] = field(default_factory=dict)
 
@@ -225,6 +230,46 @@ def _cut_before_tare(curves: dict[str, list[list[float]]]) -> None:
             ]
 
 
+# Kennzahlen der Shot-Auswertung, die die App mitschickt. Die Integration rechnet
+# selbst nichts aus, sie zeigt nur an.
+ANALYSIS_NUMBERS = (
+    "first_drip_s",
+    "end_s",
+    "main_flow",
+    "first_third_flow",
+    "last_third_flow",
+    "peak_flow",
+    "max_rise_2s",
+)
+ANALYSIS_TEXTS = ("shape", "grind_hint", "anomaly_reason")
+# Profil ohne verwertbare Kurve, gilt hier als „keine Auswertung“.
+SHAPE_UNKNOWN = "UNKNOWN"
+
+
+def _analysis(data: dict[str, Any]) -> dict[str, Any]:
+    """Auswertung aus der App: nur bekannte Felder, leere Werte fallen weg.
+
+    0 bedeutet hier nicht „fehlt“ (Fluss 0 ist ein Messwert), darum nicht _number().
+    """
+    result: dict[str, Any] = {}
+    for key in ANALYSIS_NUMBERS:
+        value = data.get(key)
+        if isinstance(value, bool) or not isinstance(value, int | float):
+            continue
+        if math.isfinite(value):
+            result[key] = round(float(value), 2)
+    for key in ANALYSIS_TEXTS:
+        if (text := _text(data.get(key))) is not None:
+            result[key] = text
+    if result.get("shape") == SHAPE_UNKNOWN:
+        del result["shape"]
+    if isinstance(version := data.get("version"), int) and not isinstance(
+        version, bool
+    ):
+        result["version"] = version
+    return result
+
+
 def _brew_time(brew: dict[str, Any]) -> float | None:
     """Brühzeit in Sekunden: brew_time (ganze Sekunden) plus brew_time_milliseconds."""
     seconds = _number(brew.get("brew_time")) or 0.0
@@ -259,6 +304,7 @@ def parse_shot(data: Any) -> Shot:
     )
     ratio = round(yield_g / dose, 2) if dose and yield_g else None
     pressure = curves.get("pressure")
+    analysis = _analysis(_dict(envelope.get("analysis")))
 
     brewed_at = envelope["brewed_at"]
     return Shot(
@@ -281,6 +327,10 @@ def parse_shot(data: Any) -> Shot:
         ey=_number(brew.get("ey")),
         rating=_number(brew.get("rating")),
         peak_pressure=max(value for _, value in pressure) if pressure else None,
+        shape=analysis.get("shape"),
+        main_flow=analysis.get("main_flow"),
+        grind_hint=analysis.get("grind_hint"),
+        analysis=analysis,
         curves=curves,
         payload=data,
     )
