@@ -46,7 +46,7 @@ def test_yield_falls_back_to_brew_quantity() -> None:
     assert shot.ratio == 13.89
 
 
-def test_curves_use_brew_time_in_seconds() -> None:
+def test_curves_in_seconds_from_shot_start() -> None:
     shot = parse_shot(make_shot())
 
     assert shot.curves["weight"] == [[0.0, 0.0], [10.0, 12.5], [28.5, 36.4]]
@@ -131,3 +131,96 @@ def test_missing_required_field(missing: str) -> None:
 def test_payload_must_be_object() -> None:
     with pytest.raises(vol.Invalid):
         parse_shot([make_shot()])
+
+
+def _point(clock: str, brew_time: str, key: str, value: float) -> dict:
+    return {"timestamp": clock, "brew_time": brew_time, key: value}
+
+
+def test_curves_use_timestamp_not_brew_time() -> None:
+    """brew_time ist "Sekunde.Zähler": "0.10" kommt nach "0.9", nicht davor."""
+    payload = make_shot()
+    payload["visualizer"]["brewFlow"] = {
+        "weight": [
+            _point("08:00:00.000", "0.0", "actual_weight", 0),
+            _point("08:00:00.900", "0.9", "actual_weight", 0.5),
+            _point("08:00:01.000", "0.10", "actual_weight", 0.6),
+            _point("08:00:01.100", "1.1", "actual_weight", 0.8),
+        ],
+    }
+
+    shot = parse_shot(payload)
+
+    assert shot.curves["weight"] == [
+        [0.0, 0.0],
+        [0.9, 0.5],
+        [1.0, 0.6],
+        [1.1, 0.8],
+    ]
+
+
+def test_curves_share_one_time_axis() -> None:
+    payload = make_shot()
+    payload["visualizer"]["brewFlow"] = {
+        "weight": [_point("08:00:00.500", "0.1", "actual_weight", 0)],
+        "pressureFlow": [_point("08:00:00.200", "0.0", "actual_pressure", 1.5)],
+    }
+
+    shot = parse_shot(payload)
+
+    assert shot.curves["pressure"] == [[0.0, 1.5]]
+    assert shot.curves["weight"] == [[0.3, 0.0]]
+
+
+def test_curves_over_midnight() -> None:
+    payload = make_shot()
+    payload["visualizer"]["brewFlow"] = {
+        "weight": [
+            _point("23:59:59.500", "0.0", "actual_weight", 0),
+            _point("00:00:00.500", "1.0", "actual_weight", 2),
+        ],
+    }
+
+    shot = parse_shot(payload)
+
+    assert shot.curves["weight"] == [[0.0, 0.0], [1.0, 2.0]]
+
+
+def test_points_before_tare_are_removed() -> None:
+    """Die Tasse steht noch auf der Waage, nach dem Tarieren fällt das Gewicht auf 0."""
+    payload = make_shot()
+    payload["visualizer"]["brewFlow"] = {
+        "weight": [
+            _point("08:00:00.000", "0.0", "actual_weight", 170),
+            _point("08:00:00.200", "0.1", "actual_weight", 0),
+            _point("08:00:05.000", "5.0", "actual_weight", 3),
+        ],
+        "realtimeFlow": [
+            _point("08:00:00.000", "0.0", "flow_value", 0),
+            _point("08:00:00.200", "0.1", "flow_value", -287.5),
+            _point("08:00:05.000", "5.0", "flow_value", 1.2),
+        ],
+        "pressureFlow": [_point("08:00:00.100", "0.0", "actual_pressure", 0.7)],
+    }
+
+    shot = parse_shot(payload)
+
+    assert shot.curves["weight"] == [[0.2, 0.0], [5.0, 3.0]]
+    # negativer Fluss vom Tarieren wird zu 0
+    assert shot.curves["flow"] == [[0.2, 0.0], [5.0, 1.2]]
+    assert shot.curves["pressure"] == [[0.1, 0.7]]
+
+
+def test_weight_without_tare_is_kept() -> None:
+    """Startet die Aufnahme mitten im Shot, steigt das Gewicht von Anfang an."""
+    payload = make_shot()
+    payload["visualizer"]["brewFlow"] = {
+        "weight": [
+            _point("08:00:00.000", "0.0", "actual_weight", 2),
+            _point("08:00:01.000", "1.0", "actual_weight", 4),
+        ],
+    }
+
+    shot = parse_shot(payload)
+
+    assert shot.curves["weight"] == [[0.0, 2.0], [1.0, 4.0]]

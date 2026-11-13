@@ -8,6 +8,7 @@ schützt ein Lock die gemeinsame Verbindung.
 from __future__ import annotations
 
 import json
+import logging
 import sqlite3
 import threading
 import time
@@ -15,7 +16,9 @@ from pathlib import Path
 from typing import Any
 
 from .const import DB_VERSION, STATUS_CREATED, STATUS_UNCHANGED, STATUS_UPDATED
-from .models import Shot
+from .models import Shot, parse_shot
+
+_LOGGER = logging.getLogger(__name__)
 
 # Spalten, die aus einem Shot übernommen werden (ohne id, received_at, share_token).
 SHOT_COLUMNS = (
@@ -122,6 +125,17 @@ class ShotStore:
                 conn.execute(statement)
             conn.execute(
                 "INSERT OR IGNORE INTO meta (key, value) VALUES ('db_version', ?)",
+                (str(DB_VERSION),),
+            )
+            version = int(
+                conn.execute(
+                    "SELECT value FROM meta WHERE key = 'db_version'"
+                ).fetchone()["value"]
+            )
+            if version < 2:
+                _recalculate_curves(conn)
+            conn.execute(
+                "UPDATE meta SET value = ? WHERE key = 'db_version'",
                 (str(DB_VERSION),),
             )
         self._conn = conn
@@ -290,3 +304,31 @@ def _shot_values(shot: Shot) -> tuple[Any, ...]:
     values["curves"] = json.dumps(shot.curves, separators=(",", ":"))
     values["payload"] = json.dumps(shot.payload, separators=(",", ":"))
     return tuple(values[column] for column in SHOT_COLUMNS)
+
+
+def _recalculate_curves(conn: sqlite3.Connection) -> None:
+    """Migration auf db_version 2: Kurven aus dem Rohdatensatz neu berechnen.
+
+    Version 1 las die Zeit aus brew_time und ließ Werte vor dem Tarieren stehen, die
+    Kurven sprangen dadurch zurück. Der Rohdatensatz ist unverändert gespeichert, darum
+    lassen sich alle Shots ohne neuen Upload korrigieren.
+    """
+    rows = conn.execute("SELECT id, payload FROM shots").fetchall()
+    for row in rows:
+        try:
+            shot = parse_shot(json.loads(row["payload"]))
+        except Exception:  # noqa: BLE001 - ein kaputter Datensatz darf den Start nicht verhindern
+            _LOGGER.warning("Kurven von Shot %s nicht neu berechnet", row["id"])
+            continue
+        conn.execute(
+            "UPDATE shots SET curves = ?, has_curves = ?, peak_pressure = ? "
+            "WHERE id = ?",
+            (
+                json.dumps(shot.curves, separators=(",", ":")),
+                int(shot.has_curves),
+                shot.peak_pressure,
+                row["id"],
+            ),
+        )
+    if rows:
+        _LOGGER.info("Kurven von %s Shots neu berechnet", len(rows))
