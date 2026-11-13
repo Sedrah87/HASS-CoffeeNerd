@@ -62,7 +62,8 @@ höchstens 20 pro Request). Ein Shot ist ein Umschlag um das vorhandene Visualiz
 - `shot_id` ist Pflicht und bleibt dauerhaft der Schlüssel. Ein erneuter Upload überschreibt den Shot.
   Ist `updated_at` nicht neuer als der gespeicherte Wert, wird nichts geändert (`unchanged`).
 - `brewed_at` und `updated_at` sind Unix-Sekunden aus `brew.config`. Die Kurven enthalten in
-  `timestamp` nur die Uhrzeit, darum kommt das Datum ausschließlich aus `brewed_at`.
+  `timestamp` nur die Uhrzeit, darum kommt das Datum ausschließlich aus `brewed_at`. Für die
+  Zeitachse der Kurven ist `timestamp` dagegen die richtige Quelle (siehe Speicherung).
 - `bean2` gibt es nur bei Blend-Shots, weil das Visualizer-Format nur eine Bohne kennt.
 - `brewFlow` darf fehlen oder leer sein, z. B. bei alten Filter-Brews oder ohne Waage. Der Shot
   wird trotzdem gespeichert, dann eben ohne Kurven.
@@ -94,10 +95,20 @@ Tabelle `shots`:
 | `share_token` TEXT NULL UNIQUE | für späteres Teilen, vorerst immer leer |
 
 Dazu eine Tabelle `meta` (`key`, `value`) mit `db_version`, damit spätere Schema-Änderungen per
-Migration laufen. Indizes auf `brewed_at`, `bean_name`, `mill_name` und `preparation_name`.
+Migration laufen. Version 2 berechnet beim Start die Kurven aller Shots aus dem Rohdatensatz neu. Indizes auf `brewed_at`, `bean_name`, `mill_name` und `preparation_name`.
 
-Aufbereitete Kurven: Jede Reihe wird als `[[sekunden, wert], ...]` gespeichert, mit `sekunden` aus
-`brew_time` als Zahl. Reihen: `weight` (`actual_weight`), `flow` (`realtimeFlow.flow_value`),
+Aufbereitete Kurven: Jede Reihe wird als `[[sekunden, wert], ...]` gespeichert. `sekunden` zählt ab
+dem frühesten Messpunkt des Shots und kommt aus `timestamp` (Uhrzeit `HH:MM:SS.mmm`, auch über
+Mitternacht). `brew_time` taugt dafür nicht: Es ist „Sekunde.Zähler“, auf `0.9` folgt `0.10`, als Zahl
+gelesen springt die Kurve zurück (geprüft am 2026-11-13 an 1211 echten Profilen, in fast allen so).
+Nur wenn in einer Reihe `timestamp` fehlt, wird für alle Reihen `brew_time` als Zahl genommen.
+
+Steht beim Start noch die Tasse auf der Waage (Gewicht ab 1 g, Tarieren innerhalb von 10 s), werden
+Gewicht und Fluss dieser Waage vor dem Tarieren weggelassen. Negativer Fluss wird als 0 gespeichert,
+er entsteht nur beim Tarieren oder Abnehmen der Tasse (in echten Daten bis −830 g/s). Der
+Rohdatensatz bleibt unverändert.
+
+Reihen: `weight` (`actual_weight`), `flow` (`realtimeFlow.flow_value`),
 `pressure` (`actual_pressure`), `temperature` (`actual_temperature`), dazu bei Bedarf `weight2`
 und `flow2`. `ratio` wird nur berechnet, wenn Dosis und Ausbeute größer als 0 sind.
 
@@ -169,5 +180,5 @@ dorthin kopiert und HASS neu gestartet.
 
 - Die Mindestversion von Home Assistant und die passende Python-Version beim Anlegen des Gerüsts
   festlegen, und zwar nach dem aktuellen HA-Release, nicht aus dem Gedächtnis.
-- Vor Schritt 5 mit einem echten Export prüfen, ob `brew_time` in allen Kurven Sekunden als String
-  enthält. In den Testdaten ist das so (`"0.1"`), bei älteren Brews ist es nicht sicher.
+- ~~Mit einem echten Export prüfen, ob `brew_time` Sekunden enthält.~~ Geprüft am 2026-11-13: nein,
+  darum zählt jetzt `timestamp` (siehe Speicherung).

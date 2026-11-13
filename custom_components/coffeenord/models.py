@@ -100,27 +100,129 @@ def _dict(value: Any) -> dict[str, Any]:
     return value if isinstance(value, dict) else {}
 
 
-def _curve(points: Any, value_key: str) -> list[list[float]]:
-    """Messpunkte in [[sekunden, wert], ...] umwandeln.
+# Bis zu dieser Zeit nach Shotbeginn wird ein Tarieren der Waage erkannt (Sekunden).
+TARE_WINDOW_S = 10.0
+# Unter diesem Gewicht gilt die Waage als tariert (Gramm).
+TARE_MAX_G = 1.0
+# Fluss-Kurve → zugehörige Gewichts-Kurve (gleiche Waage).
+FLOW_OF_WEIGHT = {"flow": "weight", "flow2": "weight2"}
 
-    Die Zeit kommt aus brew_time (Sekunden, in der App als String, z. B. "12.3").
-    timestamp enthält nur die Uhrzeit ohne Datum und wird darum nicht verwendet.
-    Ungültige Punkte werden übersprungen.
-    """
+
+def _clock(value: Any) -> float | None:
+    """Uhrzeit "HH:MM:SS.mmm" in Sekunden seit Mitternacht, sonst None."""
+    if not isinstance(value, str):
+        return None
+    try:
+        hours, minutes, seconds = value.split(":")
+        result = int(hours) * 3600 + int(minutes) * 60 + float(seconds)
+    except ValueError:
+        return None
+    return result if math.isfinite(result) else None
+
+
+def _raw_points(points: Any, value_key: str) -> list[tuple[Any, Any, float]]:
+    """(timestamp, brew_time, wert) aller Messpunkte mit gültigem Wert."""
     if not isinstance(points, list):
         return []
-    result: list[list[float]] = []
+    result = []
     for point in points:
         if not isinstance(point, dict):
             continue
         try:
-            seconds = float(point["brew_time"])
             value = float(point[value_key])
         except KeyError, TypeError, ValueError:
             continue
-        if math.isfinite(seconds) and math.isfinite(value):
-            result.append([seconds, value])
+        if math.isfinite(value):
+            result.append((point.get("timestamp"), point.get("brew_time"), value))
     return result
+
+
+def _curves(flow: dict[str, Any]) -> dict[str, list[list[float]]]:
+    """Kurven als [[sekunden, wert], ...], Sekunden ab dem ersten Messpunkt des Shots.
+
+    Die Zeit kommt aus timestamp (Uhrzeit des Messpunkts). brew_time taugt dafür nicht:
+    Es ist "Sekunde.Zähler", auf "0.9" folgt "0.10", als Zahl gelesen springt die Kurve
+    zurück. Nur wenn in einer Reihe timestamps fehlen, wird brew_time als Zahl genommen.
+    """
+    raw = {
+        name: _raw_points(flow.get(source), value_key)
+        for name, (source, value_key) in CURVE_SOURCES.items()
+    }
+    clocks = {
+        name: [_clock(timestamp) for timestamp, _, _ in points]
+        for name, points in raw.items()
+    }
+    # Uhrzeit nur, wenn alle Reihen sie haben, gemischt gäbe es keine gemeinsame Achse.
+    use_clock = any(raw.values()) and all(
+        None not in values for values in clocks.values()
+    )
+    reference = next((values[0] for values in clocks.values() if values), None)
+
+    curves: dict[str, list[list[float]]] = {}
+    for name, points in raw.items():
+        series: list[list[float]] = []
+        if use_clock and reference is not None:
+            for clock, (_, _, value) in zip(clocks[name], points, strict=True):
+                seconds = clock - reference
+                # Shot über Mitternacht: Uhrzeit springt von 23:59 auf 00:00.
+                if seconds < -43200:
+                    seconds += 86400
+                elif seconds > 43200:
+                    seconds -= 86400
+                series.append([seconds, value])
+        else:
+            for _, brew_time, value in points:
+                try:
+                    seconds = float(brew_time)
+                except TypeError, ValueError:
+                    continue
+                if math.isfinite(seconds):
+                    series.append([seconds, value])
+        series.sort(key=lambda point: point[0])
+        if series:
+            curves[name] = series
+
+    # Bei der Uhrzeit beginnt der Shot mit dem frühesten Messpunkt aller Reihen bei 0 s.
+    if use_clock and curves:
+        offset = min(series[0][0] for series in curves.values())
+        for series in curves.values():
+            for point in series:
+                point[0] = round(point[0] - offset, 3)
+
+    _cut_before_tare(curves)
+    for name in FLOW_OF_WEIGHT:
+        for point in curves.get(name, []):
+            # Negativer Fluss entsteht nur beim Tarieren oder Abnehmen der Tasse.
+            point[1] = max(point[1], 0.0)
+    return {name: series for name, series in curves.items() if series}
+
+
+def _cut_before_tare(curves: dict[str, list[list[float]]]) -> None:
+    """Messpunkte vor dem Tarieren entfernen (Gewicht und Fluss derselben Waage).
+
+    Steht beim Start noch die Tasse auf der Waage, beginnt das Gewicht z. B. bei 170 g
+    und fällt nach dem Tarieren auf 0. Das wäre eine Spitze im Diagramm, und der daraus
+    berechnete Fluss läge bei mehreren hundert g/s im Minus.
+    """
+    for flow_name, weight_name in FLOW_OF_WEIGHT.items():
+        weight = curves.get(weight_name)
+        if not weight or abs(weight[0][1]) < TARE_MAX_G:
+            continue
+        tare = next(
+            (
+                seconds
+                for seconds, value in weight
+                if abs(value) < TARE_MAX_G and seconds <= TARE_WINDOW_S
+            ),
+            None,
+        )
+        if tare is None:
+            continue
+        curves[weight_name] = [point for point in weight if point[0] >= tare]
+        if flow_name in curves:
+            curves[flow_name] = [
+                point for point in curves[flow_name] if point[0] >= tare
+            ]
 
 
 def _brew_time(brew: dict[str, Any]) -> float | None:
@@ -148,11 +250,7 @@ def parse_shot(data: Any) -> Shot:
     bean2 = _dict(envelope.get("bean2"))
     flow = _dict(visualizer.get("brewFlow"))
 
-    curves: dict[str, list[list[float]]] = {}
-    for name, (source, value_key) in CURVE_SOURCES.items():
-        points = _curve(flow.get(source), value_key)
-        if points:
-            curves[name] = points
+    curves = _curves(flow)
 
     dose = _number(brew.get("grind_weight"))
     # Getränkemenge (Waage) bevorzugen, sonst die eingegebene Menge.

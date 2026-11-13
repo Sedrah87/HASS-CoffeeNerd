@@ -1,5 +1,7 @@
 """Tests für den SQLite-Speicher."""
 
+import json
+import sqlite3
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -141,3 +143,35 @@ def test_delete(store: ShotStore) -> None:
     assert store.delete("weg") is True
     assert store.delete("weg") is False
     assert store.count() == 0
+
+
+def test_migration_recalculates_curves(tmp_path: Path) -> None:
+    """Shots aus db_version 1 bekommen beim Öffnen neu berechnete Kurven."""
+    path = tmp_path / "coffeenord" / "shots.db"
+    shot_store = ShotStore(path)
+    shot_store.open()
+    shot_store.upsert(parse_shot(make_shot()))
+    shot_store.close()
+    # Zustand von Version 1 nachstellen: alte Kurven und alte Versionsnummer.
+    with sqlite3.connect(path) as conn:
+        conn.execute(
+            "UPDATE shots SET curves = ?", (json.dumps({"weight": [[0.1, 9]]}),)
+        )
+        conn.execute("UPDATE meta SET value = '1' WHERE key = 'db_version'")
+
+    shot_store = ShotStore(path)
+    shot_store.open()
+    shot = shot_store.get(make_shot()["shot_id"])
+    shot_store.close()
+
+    assert shot_store_version(path) == DB_VERSION
+    assert shot["curves"] == parse_shot(make_shot()).curves
+
+
+def shot_store_version(path: Path) -> int:
+    with sqlite3.connect(path) as conn:
+        return int(
+            conn.execute("SELECT value FROM meta WHERE key = 'db_version'").fetchone()[
+                0
+            ]
+        )

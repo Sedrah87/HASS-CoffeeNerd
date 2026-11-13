@@ -6,7 +6,7 @@ TITLE = "CoffeeNørd"
 # Version des Upload-Formats (Feld "schema_version" im Payload).
 SCHEMA_VERSION = 1
 # Version des Datenbankschemas (Tabelle meta), Grundlage für spätere Migrationen.
-DB_VERSION = 1
+DB_VERSION = 2
 DB_DIR = "coffeenord"
 DB_FILE = "shots.db"
 
