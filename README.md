@@ -140,13 +140,14 @@ automation:
 
 ## Schnittstelle
 
-Die App spricht mit zwei Endpunkten. Angemeldet wird mit einem Long-Lived Token als
+Die App spricht mit drei Endpunkten. Angemeldet wird mit einem Long-Lived Token als
 `Authorization: Bearer …`:
 
 | Endpunkt | Inhalt |
 |---|---|
 | `POST /api/coffeenord/shots` | ein Shot |
 | `POST /api/coffeenord/shots/batch` | `{"shots": [...]}`, höchstens 20 pro Aufruf |
+| `POST /api/coffeenord/shots/delete` | `{"shot_ids": [...]}`, in der App gelöschte Brews, höchstens 200 pro Aufruf |
 
 Ein Shot ist ein Umschlag um das Visualizer-JSON der App. Der Schlüssel ist die Brew-UUID:
 
@@ -167,7 +168,10 @@ Ein Shot ist ein Umschlag um das Visualizer-JSON der App. Der Schlüssel ist die
 
 Die Antwort ist `created`, `updated` oder `unchanged`. `unchanged` heißt: Der Stand ist älter als der
 gespeicherte, oder er ist gleich alt und die Daten sind identisch. Bei gleichem `updated_at` mit
-anderen Daten (z. B. weil die App jetzt die Auswertung mitschickt) wird der Shot aktualisiert. Ein Shot darf höchstens 2 MB groß sein. Ausprobieren ohne App:
+anderen Daten (z. B. weil die App jetzt die Auswertung mitschickt) wird der Shot aktualisiert. Ein Shot darf höchstens 2 MB groß sein.
+
+Beim Löschen kommt pro ID `deleted` oder `not_found` zurück. Ein unbekannter Shot gilt als schon
+gelöscht, die App darf eine Löschung also gefahrlos wiederholen. Ausprobieren ohne App:
 
 ```sh
 curl -X POST "http://homeassistant.local:8123/api/coffeenord/shots" \

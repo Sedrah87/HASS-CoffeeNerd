@@ -6,12 +6,17 @@ from pathlib import Path
 
 from homeassistant.core import HomeAssistant
 
-from custom_components.coffeenord.const import MAX_BATCH_SHOTS, MAX_SHOT_BYTES
+from custom_components.coffeenord.const import (
+    MAX_BATCH_SHOTS,
+    MAX_DELETE_IDS,
+    MAX_SHOT_BYTES,
+)
 
 from .payloads import make_shot
 
 SHOTS_URL = "/api/coffeenord/shots"
 BATCH_URL = "/api/coffeenord/shots/batch"
+DELETE_URL = "/api/coffeenord/shots/delete"
 
 
 async def test_upload_requires_auth(hass_client_no_auth, setup_integration) -> None:
@@ -138,3 +143,45 @@ async def test_batch_body_in_chunks(hass_client, setup_integration) -> None:
     assert response.status == HTTPStatus.OK
     results = (await response.json())["results"]
     assert [r["status"] for r in results] == ["created"] * 10
+
+
+async def test_delete_requires_auth(hass_client_no_auth, setup_integration) -> None:
+    client = await hass_client_no_auth()
+
+    response = await client.post(DELETE_URL, json={"shot_ids": ["a"]})
+
+    assert response.status == HTTPStatus.UNAUTHORIZED
+
+
+async def test_delete_known_and_unknown(hass_client, setup_integration) -> None:
+    client = await hass_client()
+    shot_id = make_shot()["shot_id"]
+    await client.post(SHOTS_URL, json=make_shot())
+
+    response = await client.post(DELETE_URL, json={"shot_ids": [shot_id, "unbekannt"]})
+
+    assert response.status == HTTPStatus.OK
+    assert await response.json() == {
+        "results": [
+            {"shot_id": shot_id, "status": "deleted"},
+            {"shot_id": "unbekannt", "status": "not_found"},
+        ]
+    }
+    assert setup_integration.runtime_data.count() == 0
+
+    # Erneutes Senden (die App wiederholt unbestätigte Löschungen) ist harmlos.
+    response = await client.post(DELETE_URL, json={"shot_ids": [shot_id]})
+    assert (await response.json())["results"][0]["status"] == "not_found"
+
+
+async def test_delete_rejects_bad_body(hass_client, setup_integration) -> None:
+    client = await hass_client()
+
+    for body in ({}, {"shot_ids": "a"}, {"shot_ids": [1]}, {"shot_ids": [""]}):
+        response = await client.post(DELETE_URL, json=body)
+        assert response.status == HTTPStatus.BAD_REQUEST
+
+    response = await client.post(
+        DELETE_URL, json={"shot_ids": [str(i) for i in range(MAX_DELETE_IDS + 1)]}
+    )
+    assert response.status == HTTPStatus.REQUEST_ENTITY_TOO_LARGE

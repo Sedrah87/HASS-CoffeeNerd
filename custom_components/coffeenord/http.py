@@ -16,9 +16,15 @@ from aiohttp import web
 from homeassistant.components.http import HomeAssistantView
 from homeassistant.core import HomeAssistant
 
-from .const import DOMAIN, MAX_BATCH_SHOTS, MAX_SHOT_BYTES, STATUS_ERROR
+from .const import (
+    DOMAIN,
+    MAX_BATCH_SHOTS,
+    MAX_DELETE_IDS,
+    MAX_SHOT_BYTES,
+    STATUS_ERROR,
+)
 from .models import parse_shot
-from .shots import async_save_shot
+from .shots import async_delete_shot, async_save_shot
 from .store import ShotStore
 
 _LOGGER = logging.getLogger(__name__)
@@ -37,6 +43,7 @@ def async_register_views(hass: HomeAssistant) -> None:
         return
     hass.http.register_view(ShotUploadView())
     hass.http.register_view(ShotBatchUploadView())
+    hass.http.register_view(ShotDeleteView())
     hass.data[flag] = True
 
 
@@ -163,6 +170,54 @@ class ShotBatchUploadView(HomeAssistantView):
         _LOGGER.debug(
             "Batch mit %s Shots: %s",
             len(shots),
+            ", ".join(f"{r['shot_id']}={r['status']}" for r in results),
+        )
+        return self.json({"results": results})
+
+
+class ShotDeleteView(HomeAssistantView):
+    """In der App gelöschte Brews auch hier entfernen.
+
+    Ein unbekannter Shot gilt als gelöscht ("not_found"): Die App schickt
+    Löschungen erneut, bis sie bestätigt sind, und darf dabei nicht hängen bleiben.
+    """
+
+    url = "/api/coffeenord/shots/delete"
+    name = "api:coffeenord:shots:delete"
+    requires_auth = True
+
+    async def post(self, request: web.Request) -> web.Response:
+        hass: HomeAssistant = request.app["hass"]
+        store = _store(hass)
+        if store is None:
+            return _error(
+                "CoffeeNørd ist nicht eingerichtet", HTTPStatus.SERVICE_UNAVAILABLE
+            )
+
+        data, error = await _read_json(request, MAX_DELETE_IDS * 200)
+        if error is not None:
+            return error
+        shot_ids = data.get("shot_ids") if isinstance(data, dict) else None
+        if not isinstance(shot_ids, list) or not all(
+            isinstance(shot_id, str) and shot_id for shot_id in shot_ids
+        ):
+            return _error(
+                'Erwartet wird {"shot_ids": ["...", ...]}', HTTPStatus.BAD_REQUEST
+            )
+        if len(shot_ids) > MAX_DELETE_IDS:
+            return _error(
+                f"Höchstens {MAX_DELETE_IDS} Shots pro Aufruf",
+                HTTPStatus.REQUEST_ENTITY_TOO_LARGE,
+            )
+
+        results = []
+        for shot_id in shot_ids:
+            deleted = await async_delete_shot(hass, store, shot_id)
+            results.append(
+                {"shot_id": shot_id, "status": "deleted" if deleted else "not_found"}
+            )
+        _LOGGER.debug(
+            "Löschen: %s",
             ", ".join(f"{r['shot_id']}={r['status']}" for r in results),
         )
         return self.json({"results": results})
