@@ -13,6 +13,8 @@ DB_FILE = "shots.db"
 # Grenzen für den Upload.
 MAX_SHOT_BYTES = 2 * 1024 * 1024
 MAX_BATCH_SHOTS = 20
+# Löschungen sind nur IDs, darum deutlich mehr pro Aufruf.
+MAX_DELETE_IDS = 200
 
 STATUS_CREATED = "created"
 STATUS_UPDATED = "updated"
